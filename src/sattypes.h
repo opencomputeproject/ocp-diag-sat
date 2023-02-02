@@ -43,6 +43,7 @@ inline const char *Timestamp() { return STRESSAPPTEST_TIMESTAMP; }
 inline const char *BuildChangelist() { return "open source release"; }
 
 static const bool kOpenSource = true;
+
 // Workaround to allow 32/64 bit conversion
 // without running into strict aliasing problems.
 union datacast_t {

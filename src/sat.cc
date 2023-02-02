@@ -1055,10 +1055,11 @@ bool Sat::ParseArgs(int argc, char **argv) {
   }
 
   // Print each argument.
+  cmdline_json_ = "{";
   for (int i = 0; i < argc; i++) {
     if (i) cmdline_ += " ";
     cmdline_ += argv[i];
-  }
+    }
 
   return true;
 }

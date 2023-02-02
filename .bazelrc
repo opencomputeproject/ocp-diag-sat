@@ -4,6 +4,7 @@ build --linkopt=-lrt       # sys/shm
 
 # Set the C++ version
 build --cxxopt=-std=c++17
+build --host_cxxopt=-std=c++17
 
 # Set additional optimization flags - SAT must run efficiently to be effective
 build -c opt
