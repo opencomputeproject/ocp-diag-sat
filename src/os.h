@@ -272,7 +272,7 @@ class OsLayer {
 
     tsc = (static_cast<uint64>(tbu) << 32) | static_cast<uint64>(tbl);
 #elif defined(STRESSAPPTEST_CPU_X86_64) || defined(STRESSAPPTEST_CPU_I686)
-    tsc = __rdtsc();
+    tsc = __builtin_ia32_rdtsc();
 #elif defined(STRESSAPPTEST_CPU_MIPS)
     __asm __volatile("rdhwr  %0, $2\n" : "=r"(tsc));
 #elif defined(STRESSAPPTEST_CPU_ARMV7A)
