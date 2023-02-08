@@ -137,8 +137,7 @@ class Sat {
   int runtime_seconds_;               // Seconds to run.
   int page_length_;                   // Length of each memory block.
   int64 pages_;                       // Number of memory blocks.
-  int64 size_;                        // Size of memory tested, in bytes.
-  int64 size_mb_;                     // Size of memory tested, in MB.
+  int64 size_b_;                      // Size of memory tested, in bytes.
   int64 reserve_mb_;                  // Reserve at least this amount of memory
                                       // for the system, in MB.
   int64 min_hugepages_mbytes_;        // Minimum hugepages size.

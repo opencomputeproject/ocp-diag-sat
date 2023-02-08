@@ -43,6 +43,10 @@ ABSL_FLAG(
     "Whether to use coarse or fine grain lock queues during testing. By "
     "default fine grain lock queues will be used as they are more efficient.");
 
+ABSL_FLAG(int64_t, sat_memory, 0,
+          "The amount of RAM memory to test in Megabytes. A value of 0 (the "
+          "default) indictes that all free memory should be tested.");
+
 // stressapptest versioning here.
 #ifndef PACKAGE_VERSION
 static const char *kVersion = "1.0.0";
@@ -148,8 +152,9 @@ bool Sat::CheckEnvironment() {
   }
 
   // Use all memory if no size is specified.
-  if (size_mb_ == 0) size_mb_ = os_->FindFreeMemSize() / kMegabyte;
-  size_ = static_cast<int64>(size_mb_) * kMegabyte;
+  int64_t size_mb = absl::GetFlag(FLAGS_sat_memory);
+  if (size_mb == 0) size_mb = os_->FindFreeMemSize() / kMegabyte;
+  size_b_ = static_cast<int64>(size_mb) * kMegabyte;
 
   // Autodetect file locations.
   if (findfiles_ && (file_threads_ == 0)) {
@@ -171,7 +176,7 @@ bool Sat::CheckEnvironment() {
   }
 
   // We'd better have some memory by this point.
-  if (size_ < 1) {
+  if (size_b_ < 1) {
     logprintf(0, "Process Error: No memory found to test.\n");
     bad_status();
     return false;
@@ -188,10 +193,10 @@ bool Sat::CheckEnvironment() {
 
   // If platform is 32 bit Xeon, floor memory size to multiple of 4.
   if (address_mode_ == 32) {
-    size_mb_ = (size_mb_ / 4) * 4;
-    size_ = size_mb_ * kMegabyte;
+    size_mb = (size_mb / 4) * 4;
+    size_b_ = size_mb * kMegabyte;
     logprintf(1, "Log: Flooring memory allocation to multiple of 4: %lldMB\n",
-              size_mb_);
+              size_mb);
   }
 
   // Check if this system is on the whitelist for supported systems.
@@ -215,7 +220,7 @@ bool Sat::CheckEnvironment() {
 // Allocates memory to run the test on
 bool Sat::AllocateMemory() {
   // Allocate our test memory.
-  bool result = os_->AllocateTestMem(size_, paddr_base_);
+  bool result = os_->AllocateTestMem(size_b_, paddr_base_);
   if (!result) {
     logprintf(0, "Process Error: failed to allocate memory\n");
     bad_status();
@@ -598,12 +603,12 @@ bool Sat::Initialize() {
   if (!AllocateMemory()) return false;
 
   logprintf(5, "Stats: Starting SAT, %dM, %d seconds\n",
-            static_cast<int>(size_ / kMegabyte), runtime_seconds_);
+            static_cast<int>(size_b_ / kMegabyte), runtime_seconds_);
 
   if (!InitializePatterns()) return false;
 
   // Initialize memory allocation.
-  pages_ = size_ / page_length_;
+  pages_ = size_b_ / page_length_;
 
   // Allocate page queue depending on queue implementation switch.
   if (absl::GetFlag(FLAGS_sat_use_coarse_grain_queues)) {
@@ -632,8 +637,6 @@ Sat::Sat() {
   page_length_ = kSatPageSize;
   disk_pages_ = kSatDiskPage;
   pages_ = 0;
-  size_mb_ = 0;
-  size_ = size_mb_ * kMegabyte;
   reserve_mb_ = 0;
   min_hugepages_mbytes_ = 0;
   freepages_ = 0;
@@ -760,9 +763,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // Set number of megabyte to use.
-    ARG_IVALUE("-M", size_mb_);
-
     // Specify the amount of megabytes to be reserved for system.
     ARG_IVALUE("--reserve_memory", reserve_mb_);
 
@@ -966,10 +966,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   Logger::GlobalLogger()->SetVerbosity(verbosity_);
 
-  // Update relevant data members with parsed input.
-  // Translate MB into bytes.
-  size_ = static_cast<int64>(size_mb_) * kMegabyte;
-
   // Set logfile flag.
   if (strcmp(logfilename_, "")) use_logfile_ = true;
   // Checks valid page length.
@@ -1054,7 +1050,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 void Sat::PrintHelp() {
   printf(
       "Usage: ./sat(32|64) [options]\n"
-      " -M mbytes        megabytes of ram to test\n"
       " --reserve-memory If not using hugepages, the amount of memory to "
       " reserve for the system\n"
       " -H mbytes        minimum megabytes of hugepages to require\n"
