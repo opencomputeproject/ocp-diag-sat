@@ -1,0 +1,14 @@
+# Include system libraries
+build --linkopt=-lpthread  # pthread
+build --linkopt=-lrt       # sys/shm
+
+# Set the C++ version
+build --cxxopt=-std=c++17
+
+# Set additional optimization flags - SAT must run efficiently to be effective
+build -c opt
+build --copt=-g
+build --cxxopt=-DCHECKOPTS
+build --cxxopt=-O3
+build --cxxopt=-funroll-all-loops
+build --cxxopt=-funroll-loops
