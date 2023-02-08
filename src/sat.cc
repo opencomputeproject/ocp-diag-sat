@@ -30,14 +30,18 @@
 #include <list>
 #include <string>
 
-// This file must work with autoconf on its public version,
-// so these includes are correct.
+#include "absl/flags/flag.h"
 #include "disk_blocks.h"
 #include "logger.h"
 #include "os.h"
 #include "sat.h"
 #include "sattypes.h"
 #include "worker.h"
+
+ABSL_FLAG(
+    bool, sat_use_coarse_grain_queues, false,
+    "Whether to use coarse or fine grain lock queues during testing. By "
+    "default fine grain lock queues will be used as they are more efficient.");
 
 // stressapptest versioning here.
 #ifndef PACKAGE_VERSION
@@ -244,10 +248,11 @@ bool Sat::GetValid(struct page_entry *pe) { return GetValid(pe, kDontCareTag); }
 bool Sat::GetValid(struct page_entry *pe, int32 tag) {
   bool result = false;
   // Get valid page depending on implementation.
-  if (pe_q_implementation_ == SAT_FINELOCK)
-    result = finelock_q_->GetValid(pe, tag);
-  else if (pe_q_implementation_ == SAT_ONELOCK)
+  if (absl::GetFlag(FLAGS_sat_use_coarse_grain_queues)) {
     result = valid_->PopRandom(pe);
+  } else {
+    result = finelock_q_->GetValid(pe, tag);
+  }
 
   if (result) {
     pe->addr = os_->PrepareTestMem(pe->offset, page_length_);  // Map it.
@@ -267,12 +272,8 @@ bool Sat::PutValid(struct page_entry *pe) {
   pe->addr = 0;
 
   // Put valid page depending on implementation.
-  if (pe_q_implementation_ == SAT_FINELOCK)
-    return finelock_q_->PutValid(pe);
-  else if (pe_q_implementation_ == SAT_ONELOCK)
-    return valid_->Push(pe);
-  else
-    return false;
+  if (absl::GetFlag(FLAGS_sat_use_coarse_grain_queues)) return valid_->Push(pe);
+  return finelock_q_->PutValid(pe);
 }
 
 // Get an empty page with any tag.
@@ -281,10 +282,11 @@ bool Sat::GetEmpty(struct page_entry *pe) { return GetEmpty(pe, kDontCareTag); }
 bool Sat::GetEmpty(struct page_entry *pe, int32 tag) {
   bool result = false;
   // Get empty page depending on implementation.
-  if (pe_q_implementation_ == SAT_FINELOCK)
-    result = finelock_q_->GetEmpty(pe, tag);
-  else if (pe_q_implementation_ == SAT_ONELOCK)
+  if (absl::GetFlag(FLAGS_sat_use_coarse_grain_queues)) {
     result = empty_->PopRandom(pe);
+  } else {
+    result = finelock_q_->GetEmpty(pe, tag);
+  }
 
   if (result) {
     pe->addr = os_->PrepareTestMem(pe->offset, page_length_);  // Map it.
@@ -299,12 +301,8 @@ bool Sat::PutEmpty(struct page_entry *pe) {
   pe->addr = 0;
 
   // Put empty page depending on implementation.
-  if (pe_q_implementation_ == SAT_FINELOCK)
-    return finelock_q_->PutEmpty(pe);
-  else if (pe_q_implementation_ == SAT_ONELOCK)
-    return empty_->Push(pe);
-  else
-    return false;
+  if (absl::GetFlag(FLAGS_sat_use_coarse_grain_queues)) return empty_->Push(pe);
+  return finelock_q_->PutEmpty(pe);
 }
 
 // Set up the bitmap of physical pages in case we want to see which pages were
@@ -394,10 +392,11 @@ bool Sat::InitializePages() {
   // since fine-grain-locked queue keeps both valid and empty entries in the
   // same queue and randomly traverse to find pages, the empty-valid ratio
   // should be more even.
-  if (pe_q_implementation_ == SAT_FINELOCK)
-    freepages_ = pages_ / 5 * 2;  // Mark roughly 2/5 of all pages as Empty.
-  else
+  if (absl::GetFlag(FLAGS_sat_use_coarse_grain_queues)) {
     freepages_ = (pages_ / 100) + (2 * neededpages);
+  } else {
+    freepages_ = pages_ / 5 * 2;  // Mark roughly 2/5 of all pages as Empty.
+  }
 
   if (freepages_ < neededpages) {
     logprintf(0, "Process Error: freepages < neededpages.\n");
@@ -607,15 +606,15 @@ bool Sat::Initialize() {
   pages_ = size_ / page_length_;
 
   // Allocate page queue depending on queue implementation switch.
-  if (pe_q_implementation_ == SAT_FINELOCK) {
+  if (absl::GetFlag(FLAGS_sat_use_coarse_grain_queues)) {
+    empty_ = new PageEntryQueue(pages_);
+    valid_ = new PageEntryQueue(pages_);
+    if ((empty_ == NULL) || (valid_ == NULL)) return false;
+  } else {
     finelock_q_ = new FineLockPEQueue(pages_, page_length_);
     if (finelock_q_ == NULL) return false;
     finelock_q_->set_os(os_);
     os_->set_err_log_callback(finelock_q_->get_err_log_callback());
-  } else if (pe_q_implementation_ == SAT_ONELOCK) {
-    empty_ = new PageEntryQueue(pages_);
-    valid_ = new PageEntryQueue(pages_);
-    if ((empty_ == NULL) || (valid_ == NULL)) return false;
   }
 
   if (!InitializePages()) {
@@ -705,8 +704,6 @@ Sat::Sat() {
   valid_ = 0;
   empty_ = 0;
   finelock_q_ = 0;
-  // Default to use fine-grain lock for better performance.
-  pe_q_implementation_ = SAT_FINELOCK;
 
   os_ = 0;
   patternlist_ = 0;
@@ -763,9 +760,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // Switch to fall back to corase-grain-lock queue. (for benchmarking)
-    ARG_KVALUE("--coarse_grain_lock", pe_q_implementation_, SAT_ONELOCK);
-
     // Set number of megabyte to use.
     ARG_IVALUE("-M", size_mb_);
 

@@ -27,9 +27,6 @@
 // SAT stress test class.
 class Sat {
  public:
-  // Enum for page queue implementation switch.
-  enum PageQueueType { SAT_ONELOCK, SAT_FINELOCK };
-
   Sat();
   virtual ~Sat();
 
@@ -307,7 +304,6 @@ class Sat {
   class PageEntryQueue *valid_;        // Page queue structure, valid pages.
   class PageEntryQueue *empty_;        // Page queue structure, free pages.
   class FineLockPEQueue *finelock_q_;  // Page queue with fine-grain locks
-  Sat::PageQueueType pe_q_implementation_;  // Queue implementation switch
 
   DISALLOW_COPY_AND_ASSIGN(Sat);
 };
