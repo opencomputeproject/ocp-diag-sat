@@ -35,6 +35,9 @@ cc_library(
         "stressapptest_config.h",
         "worker.h",
     ],
+    deps = [
+        "@com_google_absl//absl/flags:flag",
+    ],
 )
 
 cc_binary(

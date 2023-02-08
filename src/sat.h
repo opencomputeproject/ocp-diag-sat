@@ -17,6 +17,7 @@
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
+#include "absl/flags/declare.h"
 #include "finelock_queue.h"
 #include "os.h"
 #include "queue.h"
