@@ -34,7 +34,6 @@ class Sat {
 
   // Read configuration from arguments. Called first.
   bool ParseArgs(int argc, char **argv);
-  virtual bool CheckGoogleSpecificArgs(int argc, char **argv, int *i);
   // Initialize data structures, subclasses, and resources,
   // based on command line args.
   // Called after ParseArgs().
@@ -300,8 +299,6 @@ class Sat {
   void AddrMapInit();
   void AddrMapUpdate(struct page_entry *pe);
   void AddrMapPrint();
-
-  virtual void GoogleOsOptions(std::map<std::string, std::string> *options);
 
   // Page queues, only one of (valid_+empty_) or (finelock_q_) will be used
   // at a time. A commandline switch controls which queue implementation will
