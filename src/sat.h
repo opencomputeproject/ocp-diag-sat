@@ -301,9 +301,6 @@ class Sat {
   void AddrMapUpdate(struct page_entry *pe);
   void AddrMapPrint();
 
-  // additional memory data from google-specific tests.
-  virtual void GoogleMemoryStats(float *memcopy_data, float *memcopy_bandwidth);
-
   virtual void GoogleOsOptions(std::map<std::string, std::string> *options);
 
   // Page queues, only one of (valid_+empty_) or (finelock_q_) will be used

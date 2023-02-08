@@ -553,8 +553,6 @@ bool Sat::Initialize() {
 
   std::map<std::string, std::string> options;
 
-  GoogleOsOptions(&options);
-
   // Initialize OS/Hardware interface.
   os_ = OsLayerFactory(options);
   if (!os_) {
@@ -942,10 +940,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
     // Run threads that listen for incoming SAT net connections.
     ARG_KVALUE("--listen", listen_threads_, 1);
 
-    if (CheckGoogleSpecificArgs(argc, argv, &i)) {
-      continue;
-    }
-
     ARG_IVALUE("--channel_hash", channel_hash_);
     ARG_IVALUE("--channel_width", channel_width_);
 
@@ -1140,15 +1134,6 @@ void Sat::PrintHelp() {
       " --memory_channel u1,u2   defines a comma-separated list of names "
       "for dram packages in a memory channel. Use multiple times to "
       "define multiple channels.\n");
-}
-
-bool Sat::CheckGoogleSpecificArgs(int argc, char **argv, int *i) {
-  // Do nothing, no google-specific argument on public stressapptest
-  return false;
-}
-
-void Sat::GoogleOsOptions(std::map<std::string, std::string> *options) {
-  // Do nothing, no OS-specific argument on public stressapptest
 }
 
 // Launch the SAT task threads. Returns 0 on error.
@@ -1656,13 +1641,8 @@ void Sat::MemoryStats() {
     memcopy_data += (*it)->GetMemoryCopiedData();
     memcopy_bandwidth += (*it)->GetMemoryBandwidth();
   }
-  GoogleMemoryStats(&memcopy_data, &memcopy_bandwidth);
   logprintf(4, "Stats: Memory Copy: %.2fM at %.2fMB/s\n", memcopy_data,
             memcopy_bandwidth);
-}
-
-void Sat::GoogleMemoryStats(float *memcopy_data, float *memcopy_bandwidth) {
-  // Do nothing, should be implemented by subclasses.
 }
 
 void Sat::FileStats() {
