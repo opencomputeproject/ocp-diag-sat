@@ -590,7 +590,8 @@ bool Sat::Initialize() {
   if (!AllocateMemory()) return false;
 
   logprintf(5, "Stats: Starting SAT, %dM, %d seconds\n",
-            static_cast<int>(size_b_ / kMegabyte), runtime_seconds_);
+            static_cast<int>(size_b_ / kMegabyte),
+            absl::GetFlag(FLAGS_sat_runtime));
 
   if (!InitializePatterns()) return false;
 
@@ -620,7 +621,6 @@ bool Sat::Initialize() {
 // Constructor and destructor.
 Sat::Sat() {
   // Set defaults, command line might override these.
-  runtime_seconds_ = 20;
   page_length_ = kSatPageSize;
   disk_pages_ = kSatDiskPage;
   pages_ = 0;
@@ -748,9 +748,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // Set number of seconds to run.
-    ARG_IVALUE("-s", runtime_seconds_);
-
     // Set number of memory copy threads.
     ARG_IVALUE("-m", memory_threads_);
 
@@ -1816,7 +1813,8 @@ bool Sat::Run() {
   SpawnThreads();
   pthread_sigmask(SIG_SETMASK, &prev_blocked_signals, NULL);
 
-  logprintf(12, "Log: Starting countdown with %d seconds\n", runtime_seconds_);
+  logprintf(12, "Log: Starting countdown with %d seconds\n",
+            absl::GetFlag(FLAGS_sat_runtime));
 
   // In seconds.
   static const time_t kSleepFrequency = 5;
@@ -1826,7 +1824,7 @@ bool Sat::Run() {
   // print_delay_ determines "seconds remaining" chatty update.
 
   const time_t start = time(NULL);
-  const time_t end = start + runtime_seconds_;
+  const time_t end = start + absl::GetFlag(FLAGS_sat_runtime);
   time_t now = start;
   time_t next_print = start + print_delay_;
   time_t next_pause = start + pause_delay_;

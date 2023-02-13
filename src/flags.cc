@@ -1,5 +1,7 @@
 #include "flags.h"
 
+#include <stdint.h>
+
 #include "absl/flags/flag.h"
 
 ABSL_FLAG(
@@ -8,16 +10,19 @@ ABSL_FLAG(
     "default fine grain lock queues will be used as they are more efficient.");
 
 ABSL_FLAG(
-    int64_t, sat_memory, 0,
+    uint64_t, sat_memory, 0,
     "The amount of RAM to test in Megabytes. A value of 0 (the "
     "default) indicates that all free memory should be tested, minus a "
     "reserve for system processes. This reserve will be 15\% of all memory on "
     "systems with less than 2Gb of memory, and 5\% of all memory plus "
     "192Mb on larger systems.");
 
-ABSL_FLAG(int64_t, sat_reserve_memory, 0,
+ABSL_FLAG(uint64_t, sat_reserve_memory, 0,
           "The minimum amount of RAM, in Megabytes, to reserve for other "
           "processes during the test if hugepages are not being used.");
 
-ABSL_FLAG(int64_t, sat_hugepage_memory, 0,
+ABSL_FLAG(uint64_t, sat_hugepage_memory, 0,
           "The minimum amount of hugepage RAM to test in Megabytes.");
+
+ABSL_FLAG(uint32_t, sat_runtime, 20,
+          "The desired duration of the stress test, in seconds.");

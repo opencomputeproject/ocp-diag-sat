@@ -133,7 +133,6 @@ class Sat {
   string cmdline_;
 
   // Memory and test configuration.
-  int runtime_seconds_;               // Seconds to run.
   int page_length_;                   // Length of each memory block.
   int64 pages_;                       // Number of memory blocks.
   int64 size_b_;                      // Size of memory tested, in bytes.
