@@ -37,8 +37,10 @@
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
+#include "absl/flags/flag.h"
 #include "clock.h"
 #include "error_diag.h"
+#include "flags.h"
 #include "sattypes.h"
 
 // OsLayer initialization.
@@ -46,7 +48,6 @@ OsLayer::OsLayer() {
   testmem_ = 0;
   testmemsize_ = 0;
   totalmemsize_ = 0;
-  min_hugepages_bytes_ = 0;
   reserve_mb_ = 0;
   normal_mem_ = true;
   use_hugepages_ = false;
@@ -411,8 +412,8 @@ int64 OsLayer::FindFreeMemSize() {
   // TODO(nsanders): is there a more correct way to determine target
   // memory size?
   if (hugepagesize > 0) {
-    if (min_hugepages_bytes_ > 0) {
-      minsize = min_hugepages_bytes_;
+    if (absl::GetFlag(FLAGS_sat_hugepage_memory) > 0) {
+      minsize = absl::GetFlag(FLAGS_sat_hugepage_memory) * kMegabyte;
     } else {
       minsize = hugepagesize;
     }
@@ -422,21 +423,21 @@ int64 OsLayer::FindFreeMemSize() {
     } else {
       minsize = ((pages * 95) / 100) * pagesize - (192 * kMegabyte);
     }
-    // Make sure that at least reserve_mb_ is left for the system.
-    if (reserve_mb_ > 0) {
+    // Make sure that at least "sat_reserve_memory" is left for the system.
+    if (absl::GetFlag(FLAGS_sat_reserve_memory) > 0) {
       int64 totalsize = pages * pagesize;
-      int64 reserve_kb = reserve_mb_ * kMegabyte;
-      if (reserve_kb > totalsize) {
+      int64 reserve_b = absl::GetFlag(FLAGS_sat_reserve_memory) * kMegabyte;
+      if (reserve_b > totalsize) {
         logprintf(0,
                   "Procedural Error: %lld is bigger than the total memory "
                   "available %lld\n",
-                  reserve_kb, totalsize);
-      } else if (reserve_kb > totalsize - minsize) {
+                  reserve_b, totalsize);
+      } else if (reserve_b > totalsize - minsize) {
         logprintf(5,
                   "Warning: Overriding memory to use: original %lld, "
                   "current %lld\n",
-                  minsize, totalsize - reserve_kb);
-        minsize = totalsize - reserve_kb;
+                  minsize, totalsize - reserve_b);
+        minsize = totalsize - reserve_b;
       }
     }
   }

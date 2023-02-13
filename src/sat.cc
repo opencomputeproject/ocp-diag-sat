@@ -32,20 +32,12 @@
 
 #include "absl/flags/flag.h"
 #include "disk_blocks.h"
+#include "flags.h"
 #include "logger.h"
 #include "os.h"
 #include "sat.h"
 #include "sattypes.h"
 #include "worker.h"
-
-ABSL_FLAG(
-    bool, sat_use_coarse_grain_queues, false,
-    "Whether to use coarse or fine grain lock queues during testing. By "
-    "default fine grain lock queues will be used as they are more efficient.");
-
-ABSL_FLAG(int64_t, sat_memory, 0,
-          "The amount of RAM memory to test in Megabytes. A value of 0 (the "
-          "default) indictes that all free memory should be tested.");
 
 // stressapptest versioning here.
 #ifndef PACKAGE_VERSION
@@ -564,11 +556,6 @@ bool Sat::Initialize() {
     return false;
   }
 
-  if (min_hugepages_mbytes_ > 0)
-    os_->SetMinimumHugepagesSize(min_hugepages_mbytes_ * kMegabyte);
-
-  if (reserve_mb_ > 0) os_->SetReserveSize(reserve_mb_);
-
   if (channels_.size() > 0) {
     logprintf(6,
               "Log: Decoding memory: %dx%d bit channels,"
@@ -637,8 +624,6 @@ Sat::Sat() {
   page_length_ = kSatPageSize;
   disk_pages_ = kSatDiskPage;
   pages_ = 0;
-  reserve_mb_ = 0;
-  min_hugepages_mbytes_ = 0;
   freepages_ = 0;
   paddr_base_ = 0;
   channel_hash_ = kCacheLineSize;
@@ -763,12 +748,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // Specify the amount of megabytes to be reserved for system.
-    ARG_IVALUE("--reserve_memory", reserve_mb_);
-
-    // Set minimum megabytes of hugepages to require.
-    ARG_IVALUE("-H", min_hugepages_mbytes_);
-
     // Set number of seconds to run.
     ARG_IVALUE("-s", runtime_seconds_);
 
@@ -1050,9 +1029,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 void Sat::PrintHelp() {
   printf(
       "Usage: ./sat(32|64) [options]\n"
-      " --reserve-memory If not using hugepages, the amount of memory to "
-      " reserve for the system\n"
-      " -H mbytes        minimum megabytes of hugepages to require\n"
       " -s seconds       number of seconds to run\n"
       " -m threads       number of memory copy threads to run\n"
       " -i threads       number of memory invert threads to run\n"

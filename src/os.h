@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-#ifndef STRESSAPPTEST_OS_H_  // NOLINT
+#ifndef STRESSAPPTEST_OS_H_
 #define STRESSAPPTEST_OS_H_
 
 #include <dirent.h>
@@ -17,11 +17,9 @@
 #include <string>
 #include <vector>
 
-// This file must work with autoconf on its public version,
-// so these includes are correct.
-#include "adler32memcpy.h"  // NOLINT
-#include "clock.h"          // NOLINT
-#include "sattypes.h"       // NOLINT
+#include "adler32memcpy.h"
+#include "clock.h"
+#include "sattypes.h"
 
 #if defined(STRESSAPPTEST_CPU_X86_64) || defined(STRESSAPPTEST_CPU_I686)
 #include <immintrin.h>
@@ -54,17 +52,6 @@ class OsLayer {
  public:
   OsLayer();
   virtual ~OsLayer();
-
-  // Set the minimum amount of hugepages that should be available for testing.
-  // Must be set before Initialize().
-  void SetMinimumHugepagesSize(int64 min_bytes) {
-    min_hugepages_bytes_ = min_bytes;
-  }
-
-  // Set the minium amount of memory that should not be allocated. This only
-  // has any affect if hugepages are not used.
-  // Must be set before Initialize().
-  void SetReserveSize(int64 reserve_mb) { reserve_mb_ = reserve_mb; }
 
   // Set parameters needed to translate physical address to memory module.
   void SetDramMappingParams(uintptr_t channel_hash, int channel_width,

@@ -17,7 +17,6 @@
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
-#include "absl/flags/declare.h"
 #include "finelock_queue.h"
 #include "os.h"
 #include "queue.h"
@@ -138,9 +137,7 @@ class Sat {
   int page_length_;                   // Length of each memory block.
   int64 pages_;                       // Number of memory blocks.
   int64 size_b_;                      // Size of memory tested, in bytes.
-  int64 reserve_mb_;                  // Reserve at least this amount of memory
                                       // for the system, in MB.
-  int64 min_hugepages_mbytes_;        // Minimum hugepages size.
   int64 freepages_;                   // How many invalid pages we need.
   int disk_pages_;                    // Number of pages per temp file.
   uint64 paddr_base_;                 // Physical address base.
