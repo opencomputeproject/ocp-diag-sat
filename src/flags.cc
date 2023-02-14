@@ -13,6 +13,10 @@ ABSL_FLAG(
     "Whether to use coarse or fine grain lock queues during testing. By "
     "default fine grain lock queues will be used as they are more efficient.");
 
+ABSL_FLAG(uint32_t, sat_time_remaining_delay, 10,
+          "How long to wait between printing time remaining updates during the "
+          "test, in seconds. This defaults to 10 seconds.");
+
 // Memory Copy Test
 ABSL_FLAG(
     uint64_t, sat_memory, 0,
