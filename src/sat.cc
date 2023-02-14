@@ -583,7 +583,7 @@ bool Sat::Initialize() {
 // Constructor and destructor.
 Sat::Sat() {
   // Set defaults, command line might override these.
-  page_length_ = kSatPageSize;
+  page_length_ = absl::GetFlag(FLAGS_sat_page_size);
   disk_pages_ = kSatDiskPage;
   pages_ = 0;
   freepages_ = 0;
@@ -593,7 +593,6 @@ Sat::Sat() {
 
   user_break_ = false;
   Logger::GlobalLogger()->SetVerbosity(8);
-  print_delay_ = 10;
   strict_ = 1;
   warm_ = 0;
   run_on_anything_ = 0;
@@ -602,7 +601,6 @@ Sat::Sat() {
   address_mode_ = sizeof(pvoid) * 8;
   error_injection_ = false;
   crazy_error_injection_ = false;
-  max_errorcount_ = 0;  // Zero means no early exit.
   stop_on_error_ = false;
   error_poll_ = true;
   findfiles_ = false;
@@ -694,12 +692,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // Set maximum number of errors to collect. Stop running after this many.
-    ARG_IVALUE("--max_errors", max_errorcount_);
-
-    // Set pattern block size.
-    ARG_IVALUE("-p", page_length_);
-
     // Set pattern block size.
     ARG_IVALUE("--filesize", filesize);
 
@@ -1727,9 +1719,10 @@ bool Sat::Run() {
     }
 
     // If we have an error limit, check it here and see if we should exit.
-    if (max_errorcount_ != 0) {
+    uint64_t max_errorcount = absl::GetFlag(FLAGS_sat_max_error_count);
+    if (max_errorcount != 0) {
       uint64 errors = GetTotalErrorCount();
-      if (errors > max_errorcount_) {
+      if (errors > max_errorcount) {
         logprintf(0,
                   "Log: Exiting early (%d seconds remaining) "
                   "due to excessive failures (%lld)\n",

@@ -6,6 +6,8 @@
 ABSL_DECLARE_FLAG(uint32_t, sat_runtime);
 ABSL_DECLARE_FLAG(bool, sat_use_coarse_grain_queues);
 ABSL_DECLARE_FLAG(uint32_t, sat_time_remaining_delay);
+ABSL_DECLARE_FLAG(uint32_t, sat_max_error_count);
+ABSL_DECLARE_FLAG(uint32_t, sat_page_size);
 
 // Memory Copy Test
 ABSL_DECLARE_FLAG(uint64_t, sat_memory);

@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "absl/flags/flag.h"
+#include "sattypes.h"
 
 // General Options
 ABSL_FLAG(uint32_t, sat_runtime, 20,
@@ -16,6 +17,16 @@ ABSL_FLAG(
 ABSL_FLAG(uint32_t, sat_time_remaining_delay, 10,
           "How long to wait between printing time remaining updates during the "
           "test, in seconds. This defaults to 10 seconds.");
+
+ABSL_FLAG(uint32_t, sat_max_error_count, 0,
+          "The number of errors (summed across all threads) after which the "
+          "test will be ended early. A value of 0, the default, indicates that "
+          "the test should not exit early. A value of 1 would indicate that "
+          "the test should stop after encountering any error.");
+
+ABSL_FLAG(uint32_t, sat_page_size, kSatPageSize,
+          "The size of an individual chunk of RAM, in bytes. Defaults to 1Mb "
+          "(1048576 bytes).");
 
 // Memory Copy Test
 ABSL_FLAG(

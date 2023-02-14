@@ -68,7 +68,6 @@ class Sat {
   bool GetEmpty(struct page_entry *pe, int32 tag);
 
   // Accessor functions.
-  int verbosity() const { return verbosity_; }
   int page_length() const { return page_length_; }
   int disk_pages() const { return disk_pages_; }
   int strict() const { return strict_; }
@@ -144,8 +143,6 @@ class Sat {
   // Control flags.
   volatile sig_atomic_t user_break_;  // User has signalled early exit.  Used as
                                       // a boolean.
-  int verbosity_;                     // How much to print.
-  int print_delay_;                   // Chatty update frequency.
   int strict_;                        // Check results per transaction.
   int warm_;                          // FPU warms CPU while copying.
   int address_mode_;                  // 32 or 64 bit binary.
