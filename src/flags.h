@@ -7,3 +7,4 @@ ABSL_DECLARE_FLAG(uint64_t, sat_memory);
 ABSL_DECLARE_FLAG(uint64_t, sat_reserve_memory);
 ABSL_DECLARE_FLAG(uint64_t, sat_hugepage_memory);
 ABSL_DECLARE_FLAG(uint32_t, sat_runtime);
+ABSL_DECLARE_FLAG(int32_t, sat_memory_threads);

@@ -669,8 +669,7 @@ Sat::Sat() {
   file_threads_ = 0;
   net_threads_ = 0;
   listen_threads_ = 0;
-  // Default to autodetect number of cpus, and run that many threads.
-  memory_threads_ = -1;
+  memory_threads_ = absl::GetFlag(FLAGS_sat_memory_threads);
   invert_threads_ = 0;
   fill_threads_ = 8;
   check_threads_ = 0;
@@ -748,9 +747,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // Set number of memory copy threads.
-    ARG_IVALUE("-m", memory_threads_);
-
     // Set number of memory invert threads.
     ARG_IVALUE("-i", invert_threads_);
 

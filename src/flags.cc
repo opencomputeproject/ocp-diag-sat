@@ -26,3 +26,7 @@ ABSL_FLAG(uint64_t, sat_hugepage_memory, 0,
 
 ABSL_FLAG(uint32_t, sat_runtime, 20,
           "The desired duration of the stress test, in seconds.");
+
+ABSL_FLAG(int32_t, sat_memory_threads, -1,
+          "The number of memory copy threads to run. By default, this will "
+          "equal the number of CPU cores.");
