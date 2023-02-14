@@ -653,12 +653,7 @@ Sat::Sat() {
   page_bitmap_ = 0;
   page_bitmap_size_ = 0;
 
-  // Cache coherency data initialization.
-  cc_test_ = false;         // Flag to trigger cc threads.
-  cc_cacheline_count_ = 2;  // Two datastructures of cache line size.
-  cc_cacheline_size_ = 0;   // Size of a cacheline (0 for auto-detect).
-  cc_inc_count_ = 1000;     // Number of times to increment the shared variable.
-  cc_cacheline_data_ = 0;   // Cache Line size datastructure.
+  cc_cacheline_data_ = 0;  // Cache Line size datastructure.
 
   // Cpu frequency data initialization.
   cpu_freq_test_ = false;   // Flag to trigger cpu frequency thread.
@@ -670,9 +665,9 @@ Sat::Sat() {
   net_threads_ = 0;
   listen_threads_ = 0;
   memory_threads_ = absl::GetFlag(FLAGS_sat_memory_threads);
-  invert_threads_ = 0;
+  invert_threads_ = absl::GetFlag(FLAGS_sat_invert_threads);
   fill_threads_ = 8;
-  check_threads_ = 0;
+  check_threads_ = absl::GetFlag(FLAGS_sat_check_threads);
   cpu_stress_threads_ = 0;
   disk_threads_ = 0;
   total_threads_ = 0;
@@ -747,24 +742,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // Set number of memory invert threads.
-    ARG_IVALUE("-i", invert_threads_);
-
-    // Set number of check-only threads.
-    ARG_IVALUE("-c", check_threads_);
-
-    // Set number of cache line size datastructures.
-    ARG_IVALUE("--cc_inc_count", cc_inc_count_);
-
-    // Set number of cache line size datastructures
-    ARG_IVALUE("--cc_line_count", cc_cacheline_count_);
-
-    // Override the detected or assumed cache line size.
-    ARG_IVALUE("--cc_line_size", cc_cacheline_size_);
-
-    // Flag set when cache coherency tests need to be run
-    ARG_KVALUE("--cc_test", cc_test_, true);
-
     // Set when the cpu_frequency test needs to be run
     ARG_KVALUE("--cpu_freq_test", cpu_freq_test_, true);
 
@@ -1022,9 +999,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 void Sat::PrintHelp() {
   printf(
       "Usage: ./sat(32|64) [options]\n"
-      " -s seconds       number of seconds to run\n"
-      " -m threads       number of memory copy threads to run\n"
-      " -i threads       number of memory invert threads to run\n"
       " -C threads       number of memory CPU stress threads to run\n"
       " --findfiles      find locations to do disk IO automatically\n"
       " -d device        add a direct write disk thread with block "
@@ -1066,9 +1040,6 @@ void Sat::PrintHelp() {
       "write thread (-d)\n"
       " --destructive    write/wipe disk partition (-d)\n"
       " --monitor_mode   only do ECC error polling, no stress load.\n"
-      " --cc_test        do the cache coherency testing\n"
-      " --cc_inc_count   number of times to increment the "
-      "cacheline's member\n"
       " --cc_line_count  number of cache line sized datastructures "
       "to allocate for the cache coherency threads to operate\n"
       " --cc_line_size   override the auto-detected cache line size\n"
@@ -1310,24 +1281,25 @@ void Sat::InitializeThreads() {
   workers_map_.insert(make_pair(kCPUType, cpu_vector));
 
   // CPU Cache Coherency Threads - one for each core available.
-  if (cc_test_) {
+  if (absl::GetFlag(FLAGS_sat_test_cache_coherence)) {
     WorkerVector *cc_vector = new WorkerVector();
     logprintf(12, "Log: Starting cpu cache coherency threads\n");
 
     // Allocate the shared datastructure to be worked on by the threads.
+    int cc_cacheline_count = absl::GetFlag(FLAGS_sat_cache_line_count);
     cc_cacheline_data_ = reinterpret_cast<cc_cacheline_data *>(
-        malloc(sizeof(cc_cacheline_data) * cc_cacheline_count_));
+        malloc(sizeof(cc_cacheline_data) * cc_cacheline_count));
     sat_assert(cc_cacheline_data_ != NULL);
 
     // Initialize the strucutre.
     memset(cc_cacheline_data_, 0,
-           sizeof(cc_cacheline_data) * cc_cacheline_count_);
+           sizeof(cc_cacheline_data) * cc_cacheline_count);
 
     int num_cpus = CpuCount();
     char *num;
     // Calculate the number of cache lines needed just to give each core
     // its own counter.
-    int line_size = cc_cacheline_size_;
+    int line_size = absl::GetFlag(FLAGS_sat_cache_line_size);
     if (line_size <= 0) {
       line_size = CacheLineSize();
       if (line_size < kCacheLineSize) line_size = kCacheLineSize;
@@ -1342,16 +1314,16 @@ void Sat::InitializeThreads() {
 #ifdef HAVE_POSIX_MEMALIGN
     int err_result =
         posix_memalign(reinterpret_cast<void **>(&num), line_size,
-                       line_size * needed_lines * cc_cacheline_count_);
+                       line_size * needed_lines * cc_cacheline_count);
 #else
     num = reinterpret_cast<int *>(
-        memalign(line_size, line_size * needed_lines * cc_cacheline_count_));
+        memalign(line_size, line_size * needed_lines * cc_cacheline_count));
     int err_result = (num == 0);
 #endif
     sat_assert(err_result == 0);
 
     int cline;
-    for (cline = 0; cline < cc_cacheline_count_; cline++) {
+    for (cline = 0; cline < cc_cacheline_count; cline++) {
       memset(num, 0, sizeof(*num) * num_cpus);
       cc_cacheline_data_[cline].num = num;
       num += (line_size * needed_lines) / sizeof(*num);
@@ -1359,9 +1331,9 @@ void Sat::InitializeThreads() {
 
     int tnum;
     for (tnum = 0; tnum < num_cpus; tnum++) {
-      CpuCacheCoherencyThread *thread =
-          new CpuCacheCoherencyThread(cc_cacheline_data_, cc_cacheline_count_,
-                                      tnum, num_cpus, cc_inc_count_);
+      CpuCacheCoherencyThread *thread = new CpuCacheCoherencyThread(
+          cc_cacheline_data_, cc_cacheline_count, tnum, num_cpus,
+          absl::GetFlag(FLAGS_sat_cache_increment_count));
       thread->InitThread(total_threads_++, this, os_, patternlist_,
                          &continuous_status_);
       // Pin the thread to a particular core.

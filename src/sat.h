@@ -189,14 +189,6 @@ class Sat {
   unsigned char *page_bitmap_;  // Store bitmap of physical pages seen.
   uint64 page_bitmap_size_;     // Length of physical memory represented.
 
-  // Cpu Cache Coherency Options.
-  bool cc_test_;            // Flag to decide whether to start the
-                            // cache coherency threads.
-  int cc_cacheline_count_;  // Number of cache line size structures.
-  int cc_cacheline_size_;   // Size of a cache line.
-  int cc_inc_count_;        // Number of times to increment the shared
-                            // cache lines structure members.
-
   // Cpu Frequency Options.
   bool cpu_freq_test_;      // Flag to decide whether to start the
                             // cpu frequency thread.

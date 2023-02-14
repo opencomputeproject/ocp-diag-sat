@@ -30,3 +30,29 @@ ABSL_FLAG(uint32_t, sat_runtime, 20,
 ABSL_FLAG(int32_t, sat_memory_threads, -1,
           "The number of memory copy threads to run. By default, this will "
           "equal the number of CPU cores.");
+
+ABSL_FLAG(
+    uint32_t, sat_invert_threads, 0,
+    "The number of memory invert threads to run. None will be run by default.");
+
+ABSL_FLAG(
+    uint32_t, sat_check_threads, 0,
+    "The number of memory check threads to run. None will be run by default.");
+
+ABSL_FLAG(bool, sat_test_cache_coherence, false,
+          "Whether to run the CPU Cache Coherence test, which verifies the "
+          "CPU cache by incrementing counters from threads running on "
+          "different CPU cores.");
+
+ABSL_FLAG(uint32_t, sat_cache_increment_count, 1000,
+          "The number of times that the shared counter should be incremented "
+          "when verifying cache coherence. The default value is 1000.");
+
+ABSL_FLAG(
+    uint32_t, sat_cache_line_size, 0,
+    "The size of an individual line in the CPU cache, in bytes. This is used "
+    "for the cache coherence test and is automatically determined by default.");
+
+ABSL_FLAG(uint32_t, sat_cache_line_count, 2,
+          "The amount of cache-line-sized data structures to use for the cache "
+          "coherence test. The default is 2.");
