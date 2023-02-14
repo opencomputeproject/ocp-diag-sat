@@ -657,7 +657,7 @@ Sat::Sat() {
   invert_threads_ = absl::GetFlag(FLAGS_sat_invert_threads);
   fill_threads_ = 8;
   check_threads_ = absl::GetFlag(FLAGS_sat_check_threads);
-  cpu_stress_threads_ = 0;
+  cpu_stress_threads_ = absl::GetFlag(FLAGS_sat_cpu_stress_threads);
   disk_threads_ = 0;
   total_threads_ = 0;
 
@@ -731,9 +731,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // Set number of CPU stress threads.
-    ARG_IVALUE("-C", cpu_stress_threads_);
-
     // Set logfile name.
     ARG_SVALUE("-l", logfilename_);
 

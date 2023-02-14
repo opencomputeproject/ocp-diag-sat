@@ -76,3 +76,8 @@ ABSL_FLAG(uint32_t, sat_cpu_frequency_round, 10,
           "The increment to round the CPU frequency to when reporting it, in "
           "MHz. This defaults to 10, indicating that the frequency will be "
           "rounded to the nearest 10s value.");
+
+// CPU Stress Test
+ABSL_FLAG(uint32_t, sat_cpu_stress_threads, 0,
+          "The number of threads to use for the CPU stress test. These threads "
+          "will run calculations to put stress on the CPU.");
