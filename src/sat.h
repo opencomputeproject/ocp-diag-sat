@@ -69,7 +69,6 @@ class Sat {
 
   // Accessor functions.
   int verbosity() const { return verbosity_; }
-  int logfile() const { return logfile_; }
   int page_length() const { return page_length_; }
   int disk_pages() const { return disk_pages_; }
   int strict() const { return strict_; }
@@ -98,8 +97,6 @@ class Sat {
   bool error_injection() const { return error_injection_; }
 
  protected:
-  // Opens log file for writing. Returns 0 on failure.
-  bool InitializeLogfile();
   // Checks for supported environment. Returns 0 on failure.
   bool CheckEnvironment();
   // Allocates size_ bytes of test memory.
@@ -159,9 +156,6 @@ class Sat {
   bool crazy_error_injection_;  // Simulate lots of errors.
   uint64 max_errorcount_;       // Number of errors before forced exit.
   int run_on_anything_;         // Ignore unknown machine ereor.
-  bool use_logfile_;            // Log to a file.
-  char logfilename_[255];       // Name of file to log to.
-  int logfile_;                 // File handle to log to.
   bool log_timestamps_;         // Whether to add timestamps to log lines.
 
   // Disk thread options.

@@ -61,37 +61,6 @@ Sat *g_sat = NULL;
 void SatHandleBreak(int signal) { g_sat->Break(); }
 }  // namespace
 
-// Opens the logfile for writing if necessary
-bool Sat::InitializeLogfile() {
-  // Open logfile.
-  if (use_logfile_) {
-    logfile_ = open(logfilename_,
-#if defined(O_DSYNC)
-                    O_DSYNC |
-#elif defined(O_SYNC)
-                    O_SYNC |
-#elif defined(O_FSYNC)
-                    O_FSYNC |
-#endif
-                        O_WRONLY | O_CREAT,
-                    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-    if (logfile_ < 0) {
-      printf("Fatal Error: cannot open file %s for logging\n", logfilename_);
-      bad_status();
-      return false;
-    }
-    // We seek to the end once instead of opening in append mode because no
-    // other processes should be writing to it while this one exists.
-    if (lseek(logfile_, 0, SEEK_END) == -1) {
-      printf("Fatal Error: cannot seek to end of logfile (%s)\n", logfilename_);
-      bad_status();
-      return false;
-    }
-    Logger::GlobalLogger()->SetLogFd(logfile_);
-  }
-  return true;
-}
-
 // Check that the environment is known and safe to run on.
 // Return 1 if good, 0 if unsuppported.
 bool Sat::CheckEnvironment() {
@@ -534,7 +503,6 @@ bool Sat::Initialize() {
   g_sat = this;
 
   // Initializes sync'd log file to ensure output is saved.
-  if (!InitializeLogfile()) return false;
   Logger::GlobalLogger()->SetTimestampLogging(log_timestamps_);
   Logger::GlobalLogger()->StartThread();
 
@@ -630,8 +598,6 @@ Sat::Sat() {
   strict_ = 1;
   warm_ = 0;
   run_on_anything_ = 0;
-  use_logfile_ = false;
-  logfile_ = 0;
   log_timestamps_ = true;
   // Detect 32/64 bit binary.
   void *pvoid = 0;
@@ -678,7 +644,6 @@ Sat::Sat() {
 
   os_ = 0;
   patternlist_ = 0;
-  logfilename_[0] = 0;
 
   read_block_size_ = 512;
   write_block_size_ = -1;
@@ -731,9 +696,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // Set logfile name.
-    ARG_SVALUE("-l", logfilename_);
-
     // Verbosity level.
     ARG_IVALUE("-v", verbosity_);
 
@@ -891,8 +853,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   Logger::GlobalLogger()->SetVerbosity(verbosity_);
 
-  // Set logfile flag.
-  if (strcmp(logfilename_, "")) use_logfile_ = true;
   // Checks valid page length.
   if (page_length_ && !(page_length_ & (page_length_ - 1)) &&
       (page_length_ > 1023)) {
@@ -975,13 +935,11 @@ bool Sat::ParseArgs(int argc, char **argv) {
 void Sat::PrintHelp() {
   printf(
       "Usage: ./sat(32|64) [options]\n"
-      " -C threads       number of memory CPU stress threads to run\n"
       " --findfiles      find locations to do disk IO automatically\n"
       " -d device        add a direct write disk thread with block "
       "device (or file) 'device'\n"
       " -f filename      add a disk thread with "
       "tempfile 'filename'\n"
-      " -l logfile       log output to file 'logfile'\n"
       " --no_timestamps  do not prefix timestamps to log messages\n"
       " --max_errors n   exit early after finding 'n' errors\n"
       " -v level         verbosity (0-20), default is 8\n"
@@ -1860,10 +1818,6 @@ bool Sat::Cleanup() {
   g_sat = NULL;
   Logger::GlobalLogger()->StopThread();
   Logger::GlobalLogger()->SetStdoutOnly();
-  if (logfile_) {
-    close(logfile_);
-    logfile_ = 0;
-  }
   if (patternlist_) {
     patternlist_->Destroy();
     delete patternlist_;
