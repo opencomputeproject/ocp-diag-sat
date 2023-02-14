@@ -56,3 +56,17 @@ ABSL_FLAG(
 ABSL_FLAG(uint32_t, sat_cache_line_count, 2,
           "The amount of cache-line-sized data structures to use for the cache "
           "coherence test. The default is 2.");
+
+ABSL_FLAG(bool, sat_test_cpu_frequency, false,
+          "Whether to run the CPU frequency test, which validates the CPU "
+          "frequency against a user specified threshold.");
+
+ABSL_FLAG(
+    uint32_t, sat_cpu_frequency_threshold, 0,
+    "The threshold, in MHz, under which the CPU frequency test will fail. This "
+    "defaults to 0, so the test will always fail if this is not set.");
+
+ABSL_FLAG(uint32_t, sat_cpu_frequency_round, 10,
+          "The increment to round the CPU frequency to when reporting it, in "
+          "MHz. This defaults to 10, indicating that the frequency will be "
+          "rounded to the nearest 10s value.");

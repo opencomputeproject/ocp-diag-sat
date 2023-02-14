@@ -115,23 +115,17 @@ bool Sat::CheckEnvironment() {
 #endif
 
   // Check if the cpu frequency test is enabled and able to run.
-  if (cpu_freq_test_) {
+  if (absl::GetFlag(FLAGS_sat_test_cpu_frequency)) {
     if (!CpuFreqThread::CanRun()) {
       logprintf(0,
                 "Process Error: This platform does not support this "
                 "test.\n");
       bad_status();
       return false;
-    } else if (cpu_freq_threshold_ <= 0) {
+    } else if (absl::GetFlag(FLAGS_sat_cpu_frequency_threshold) <= 0) {
       logprintf(0,
                 "Process Error: The cpu frequency test requires "
                 "--cpu_freq_threshold set to a value > 0\n");
-      bad_status();
-      return false;
-    } else if (cpu_freq_round_ < 0) {
-      logprintf(0,
-                "Process Error: The --cpu_freq_round option must be greater"
-                " than or equal to zero. A value of zero means no rounding.\n");
       bad_status();
       return false;
     }
@@ -655,11 +649,6 @@ Sat::Sat() {
 
   cc_cacheline_data_ = 0;  // Cache Line size datastructure.
 
-  // Cpu frequency data initialization.
-  cpu_freq_test_ = false;   // Flag to trigger cpu frequency thread.
-  cpu_freq_threshold_ = 0;  // Threshold, in MHz, at which a cpu fails.
-  cpu_freq_round_ = 10;     // Round the computed frequency to this value.
-
   sat_assert(0 == pthread_mutex_init(&worker_lock_, NULL));
   file_threads_ = 0;
   net_threads_ = 0;
@@ -742,16 +731,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // Set when the cpu_frequency test needs to be run
-    ARG_KVALUE("--cpu_freq_test", cpu_freq_test_, true);
-
-    // Set the threshold in MHz at which the cpu frequency test will fail.
-    ARG_IVALUE("--cpu_freq_threshold", cpu_freq_threshold_);
-
-    // Set the rounding value for the cpu frequency test. The default is to
-    // round to the nearest 10s value.
-    ARG_IVALUE("--cpu_freq_round", cpu_freq_round_);
-
     // Set number of CPU stress threads.
     ARG_IVALUE("-C", cpu_stress_threads_);
 
@@ -1040,15 +1019,6 @@ void Sat::PrintHelp() {
       "write thread (-d)\n"
       " --destructive    write/wipe disk partition (-d)\n"
       " --monitor_mode   only do ECC error polling, no stress load.\n"
-      " --cc_line_count  number of cache line sized datastructures "
-      "to allocate for the cache coherency threads to operate\n"
-      " --cc_line_size   override the auto-detected cache line size\n"
-      " --cpu_freq_test  enable the cpu frequency test (requires the "
-      "--cpu_freq_threshold argument to be set)\n"
-      " --cpu_freq_threshold  fail the cpu frequency test if the frequency "
-      "goes below this value (specified in MHz)\n"
-      " --cpu_freq_round round the computed frequency to this value, if set"
-      " to zero, only round to the nearest MHz\n"
       " --paddr_base     allocate memory starting from this address\n"
       " --pause_delay    delay (in seconds) between power spikes\n"
       " --pause_duration duration (in seconds) of each pause\n"
@@ -1345,12 +1315,13 @@ void Sat::InitializeThreads() {
     workers_map_.insert(make_pair(kCCType, cc_vector));
   }
 
-  if (cpu_freq_test_) {
+  if (absl::GetFlag(FLAGS_sat_test_cpu_frequency)) {
     // Create the frequency test thread.
     logprintf(5, "Log: Running cpu frequency test: threshold set to %dMHz.\n",
-              cpu_freq_threshold_);
-    CpuFreqThread *thread =
-        new CpuFreqThread(CpuCount(), cpu_freq_threshold_, cpu_freq_round_);
+              absl::GetFlag(FLAGS_sat_cpu_frequency_threshold));
+    CpuFreqThread *thread = new CpuFreqThread(
+        CpuCount(), absl::GetFlag(FLAGS_sat_cpu_frequency_threshold),
+        absl::GetFlag(FLAGS_sat_cpu_frequency_round));
     // This thread should be paused when other threads are paused.
     thread->InitThread(total_threads_++, this, os_, NULL, &power_spike_status_);
 

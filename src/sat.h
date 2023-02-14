@@ -189,14 +189,6 @@ class Sat {
   unsigned char *page_bitmap_;  // Store bitmap of physical pages seen.
   uint64 page_bitmap_size_;     // Length of physical memory represented.
 
-  // Cpu Frequency Options.
-  bool cpu_freq_test_;      // Flag to decide whether to start the
-                            // cpu frequency thread.
-  int cpu_freq_threshold_;  // The MHz threshold which will cause
-                            // the test to fail.
-  int cpu_freq_round_;      // Round the computed frequency to this
-                            // value.
-
   // Thread control.
   int file_threads_;        // Threads of file IO.
   int net_threads_;         // Threads of network IO.
