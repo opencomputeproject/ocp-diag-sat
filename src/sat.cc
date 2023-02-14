@@ -503,7 +503,7 @@ bool Sat::Initialize() {
   g_sat = this;
 
   // Initializes sync'd log file to ensure output is saved.
-  Logger::GlobalLogger()->SetTimestampLogging(log_timestamps_);
+  Logger::GlobalLogger()->SetTimestampLogging(true);
   Logger::GlobalLogger()->StartThread();
 
   logprintf(5, "Log: Commandline - %s\n", cmdline_.c_str());
@@ -597,7 +597,6 @@ Sat::Sat() {
   strict_ = 1;
   warm_ = 0;
   run_on_anything_ = 0;
-  log_timestamps_ = true;
   // Detect 32/64 bit binary.
   void *pvoid = 0;
   address_mode_ = sizeof(pvoid) * 8;
@@ -695,9 +694,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // Turn off timestamps logging.
-    ARG_KVALUE("--no_timestamps", log_timestamps_, false);
-
     // Set maximum number of errors to collect. Stop running after this many.
     ARG_IVALUE("--max_errors", max_errorcount_);
 

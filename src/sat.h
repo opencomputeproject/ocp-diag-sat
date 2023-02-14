@@ -156,7 +156,6 @@ class Sat {
   bool crazy_error_injection_;  // Simulate lots of errors.
   uint64 max_errorcount_;       // Number of errors before forced exit.
   int run_on_anything_;         // Ignore unknown machine ereor.
-  bool log_timestamps_;         // Whether to add timestamps to log lines.
 
   // Disk thread options.
   int read_block_size_;     // Size of block to read from disk.
