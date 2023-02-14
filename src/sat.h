@@ -17,7 +17,9 @@
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
+#include "absl/flags/flag.h"
 #include "finelock_queue.h"
+#include "flags.h"
 #include "os.h"
 #include "queue.h"
 #include "sattypes.h"
@@ -77,7 +79,9 @@ class Sat {
   int errors() const { return errorcount_; }
   int warm() const { return warm_; }
   bool stop_on_error() const { return stop_on_error_; }
-  bool use_affinity() const { return use_affinity_; }
+  bool use_affinity() const {
+    return !absl::GetFlag(FLAGS_sat_no_cpu_affinity);
+  }
   int32 region_mask() const { return region_mask_; }
   // Semi-accessor to find the "nth" region to avoid replicated bit searching..
   int32 region_find(int32 num) const {
@@ -203,7 +207,6 @@ class Sat {
   // Block table for IO device.
   vector<DiskBlockTable *> blocktables_;
 
-  bool use_affinity_;                // Should stressapptest set cpu affinity?
   int32 region_mask_;                // Bitmask of available NUMA regions.
   int32 region_count_;               // Count of available NUMA regions.
   int32 region_[32];                 // Pagecount per region.

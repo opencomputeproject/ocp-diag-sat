@@ -28,6 +28,11 @@ ABSL_FLAG(uint32_t, sat_page_size, kSatPageSize,
           "The size of an individual chunk of RAM, in bytes. Defaults to 1Mb "
           "(1048576 bytes).");
 
+ABSL_FLAG(bool, sat_no_cpu_affinity, false,
+          "Indicates that threads should not be assigned to particular CPU "
+          "cores when testing. This feature is deactivated (meaning threads "
+          "will be assigned to particular cores) by default.");
+
 // Memory Copy Test
 ABSL_FLAG(
     uint64_t, sat_memory, 0,
@@ -96,3 +101,8 @@ ABSL_FLAG(uint32_t, sat_cpu_frequency_round, 10,
 ABSL_FLAG(uint32_t, sat_cpu_stress_threads, 0,
           "The number of threads to use for the CPU stress test. These threads "
           "will run calculations to put stress on the CPU.");
+
+// File IO Test
+ABSL_FLAG(uint32_t, sat_filesize, kSatPageSize* kSatDiskPage,
+          "The size of the temp files to create when performing disk IO "
+          "operations, in bytes. This defaults to 8Mb (8388608 bytes)");

@@ -8,6 +8,7 @@ ABSL_DECLARE_FLAG(bool, sat_use_coarse_grain_queues);
 ABSL_DECLARE_FLAG(uint32_t, sat_time_remaining_delay);
 ABSL_DECLARE_FLAG(uint32_t, sat_max_error_count);
 ABSL_DECLARE_FLAG(uint32_t, sat_page_size);
+ABSL_DECLARE_FLAG(bool, sat_no_cpu_affinity);
 
 // Memory Copy Test
 ABSL_DECLARE_FLAG(uint64_t, sat_memory);
@@ -34,3 +35,6 @@ ABSL_DECLARE_FLAG(uint32_t, sat_cpu_frequency_round);
 
 // CPU Stress Test
 ABSL_DECLARE_FLAG(uint32_t, sat_cpu_stress_threads);
+
+// File IO Test
+ABSL_DECLARE_FLAG(uint32_t, sat_filesize);

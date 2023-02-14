@@ -623,7 +623,6 @@ Sat::Sat() {
   disk_threads_ = 0;
   total_threads_ = 0;
 
-  use_affinity_ = true;
   region_mask_ = 0;
   region_count_ = 0;
   for (int i = 0; i < 32; i++) {
@@ -688,15 +687,10 @@ Sat::~Sat() {
 // self-documentation or unexpected args.
 bool Sat::ParseArgs(int argc, char **argv) {
   int i;
-  uint64 filesize = page_length_ * disk_pages_;
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // Set pattern block size.
-    ARG_IVALUE("--filesize", filesize);
-
     // NUMA options.
-    ARG_KVALUE("--no_affinity", use_affinity_, false);
     ARG_KVALUE("--local_numa", region_mode_, kLocalNuma);
     ARG_KVALUE("--remote_numa", region_mode_, kRemoteNuma);
 
@@ -849,6 +843,7 @@ bool Sat::ParseArgs(int argc, char **argv) {
   }
 
   // Set disk_pages_ if filesize or page size changed.
+  uint32_t filesize = absl::GetFlag(FLAGS_sat_filesize);
   if (filesize !=
       static_cast<uint64>(page_length_) * static_cast<uint64>(disk_pages_)) {
     disk_pages_ = filesize / page_length_;
@@ -925,7 +920,6 @@ void Sat::PrintHelp() {
       " -W               Use more CPU-stressful memory copy\n"
       " -A               run in degraded mode on incompatible systems\n"
       " -p pagesize      size in bytes of memory chunks\n"
-      " --filesize size  size of disk IO tempfiles\n"
       " -n ipaddr        add a network thread connecting to "
       "system at 'ipaddr'\n"
       " --listen         run a thread to listen for and respond "
