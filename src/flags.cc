@@ -53,6 +53,16 @@ ABSL_FLAG(int32_t, sat_memory_threads, -1,
           "The number of memory copy threads to run. By default, this will "
           "equal the number of CPU cores.");
 
+ABSL_FLAG(bool, sat_local_numa, false,
+          "Whether to use memory specifically from regions local to each "
+          "processor core running the memory copy test. By default memory "
+          "regions will not be considered.");
+
+ABSL_FLAG(bool, sat_remote_numa, false,
+          "Whether to use memory specifically from regions that are not local "
+          "to each processor core running the memory copy test. By default "
+          "memory regions will not be considered.");
+
 // Memory Invert Test
 ABSL_FLAG(
     uint32_t, sat_invert_threads, 0,

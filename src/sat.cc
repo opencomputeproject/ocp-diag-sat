@@ -628,7 +628,11 @@ Sat::Sat() {
   for (int i = 0; i < 32; i++) {
     region_[i] = 0;
   }
-  region_mode_ = 0;
+  region_mode_ =
+      absl::GetFlag(FLAGS_sat_local_numa)
+          ? RegionMode::kLocalNuma
+          : (absl::GetFlag(FLAGS_sat_remote_numa) ? RegionMode::kRemoteNuma
+                                                  : RegionMode::kUndefined);
 
   errorcount_ = 0;
   statuscount_ = 0;
@@ -690,10 +694,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // NUMA options.
-    ARG_KVALUE("--local_numa", region_mode_, kLocalNuma);
-    ARG_KVALUE("--remote_numa", region_mode_, kRemoteNuma);
-
     // Autodetect tempfile locations.
     ARG_KVALUE("--findfiles", findfiles_, 1);
 
@@ -997,15 +997,15 @@ void Sat::InitializeThreads() {
     thread->InitThread(total_threads_++, this, os_, patternlist_,
                        &power_spike_status_);
 
-    if ((region_count_ > 1) && (region_mode_)) {
+    if (region_count_ > 1 && region_mode_ != RegionMode::kUndefined) {
       int32 region = region_find(i % region_count_);
       cpu_set_t *cpuset = os_->FindCoreMask(region);
       sat_assert(cpuset);
-      if (region_mode_ == kLocalNuma) {
+      if (region_mode_ == RegionMode::kLocalNuma) {
         // Choose regions associated with this CPU.
         thread->set_cpu_mask(cpuset);
         thread->set_tag(1 << region);
-      } else if (region_mode_ == kRemoteNuma) {
+      } else if (region_mode_ == RegionMode::kRemoteNuma) {
         // Choose regions not associated with this CPU..
         thread->set_cpu_mask(cpuset);
         thread->set_tag(region_mask_ & ~(1 << region));

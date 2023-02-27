@@ -207,12 +207,12 @@ class Sat {
   // Block table for IO device.
   vector<DiskBlockTable *> blocktables_;
 
-  int32 region_mask_;                // Bitmask of available NUMA regions.
-  int32 region_count_;               // Count of available NUMA regions.
-  int32 region_[32];                 // Pagecount per region.
-  int region_mode_;                  // What to do with NUMA hints?
-  static const int kLocalNuma = 1;   // Target local memory.
-  static const int kRemoteNuma = 2;  // Target remote memory.
+  enum class RegionMode { kUndefined = 0, kLocalNuma = 1, kRemoteNuma = 2 };
+
+  int32 region_mask_;       // Bitmask of available NUMA regions.
+  int32 region_count_;      // Count of available NUMA regions.
+  int32 region_[32];        // Pagecount per region.
+  RegionMode region_mode_;  // What to do with NUMA hints?
 
   // Results.
   int64 errorcount_;  // Total hardware incidents seen.
