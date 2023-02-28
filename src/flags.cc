@@ -115,4 +115,8 @@ ABSL_FLAG(uint32_t, sat_cpu_stress_threads, 0,
 // File IO Test
 ABSL_FLAG(uint32_t, sat_filesize, kSatPageSize* kSatDiskPage,
           "The size of the temp files to create when performing disk IO "
-          "operations, in bytes. This defaults to 8Mb (8388608 bytes)");
+          "tests, in bytes. This defaults to 8Mb (8388608 bytes)");
+
+ABSL_FLAG(bool, sat_find_files, false,
+          "Whether to automatically find valid file locations when doing disk "
+          "IO testing.");

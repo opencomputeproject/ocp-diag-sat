@@ -112,7 +112,7 @@ bool Sat::CheckEnvironment() {
   size_b_ = static_cast<int64>(size_mb) * kMegabyte;
 
   // Autodetect file locations.
-  if (findfiles_ && (file_threads_ == 0)) {
+  if (absl::GetFlag(FLAGS_sat_find_files) && (file_threads_ == 0)) {
     // Get a space separated sting of disk locations.
     list<string> locations = os_->FindFileDevices();
 
@@ -603,7 +603,6 @@ Sat::Sat() {
   crazy_error_injection_ = false;
   stop_on_error_ = false;
   error_poll_ = true;
-  findfiles_ = false;
 
   do_page_map_ = false;
   page_bitmap_ = 0;
@@ -694,9 +693,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 
   // Parse each argument.
   for (i = 1; i < argc; i++) {
-    // Autodetect tempfile locations.
-    ARG_KVALUE("--findfiles", findfiles_, 1);
-
     // Inject errors to force miscompare code paths
     ARG_KVALUE("--force_errors", error_injection_, true);
     ARG_KVALUE("--force_errors_like_crazy", crazy_error_injection_, true);
@@ -909,7 +905,6 @@ bool Sat::ParseArgs(int argc, char **argv) {
 void Sat::PrintHelp() {
   printf(
       "Usage: ./sat(32|64) [options]\n"
-      " --findfiles      find locations to do disk IO automatically\n"
       " -d device        add a direct write disk thread with block "
       "device (or file) 'device'\n"
       " -f filename      add a disk thread with "
@@ -950,10 +945,6 @@ void Sat::PrintHelp() {
       " --pause_delay    delay (in seconds) between power spikes\n"
       " --pause_duration duration (in seconds) of each pause\n"
       " --no_affinity    do not set any cpu affinity\n"
-      " --local_numa     choose memory regions associated with "
-      "each CPU to be tested by that CPU\n"
-      " --remote_numa    choose memory regions not associated with "
-      "each CPU to be tested by that CPU\n"
       " --channel_hash   mask of address bits XORed to determine channel. "
       "Mask 0x40 interleaves cachelines between channels\n"
       " --channel_width bits     width in bits of each memory channel\n"

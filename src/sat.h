@@ -151,7 +151,6 @@ class Sat {
   int warm_;                          // FPU warms CPU while copying.
   int address_mode_;                  // 32 or 64 bit binary.
   bool stop_on_error_;                // Exit immendiately on any error.
-  bool findfiles_;                    // Autodetect tempfile locations.
 
   bool error_injection_;        // Simulate errors, for unittests.
   bool crazy_error_injection_;  // Simulate lots of errors.

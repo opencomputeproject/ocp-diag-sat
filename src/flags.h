@@ -40,3 +40,4 @@ ABSL_DECLARE_FLAG(uint32_t, sat_cpu_stress_threads);
 
 // File IO Test
 ABSL_DECLARE_FLAG(uint32_t, sat_filesize);
+ABSL_DECLARE_FLAG(bool, sat_find_files);
