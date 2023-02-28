@@ -33,6 +33,8 @@ ABSL_FLAG(bool, sat_no_cpu_affinity, false,
           "cores when testing. This feature is deactivated (meaning threads "
           "will be assigned to particular cores) by default.");
 
+ABSL_FLAG(bool, inject_)
+
 // Memory Copy Test
 ABSL_FLAG(
     uint64_t, sat_memory, 0,
