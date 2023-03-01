@@ -35,6 +35,7 @@ cc_library(
         "stressapptest_config.h",
         "worker.h",
     ],
+    deps = ["@ocp_diag_core//ocpdiag/core/results:test_run"],
 )
 
 cc_binary(
