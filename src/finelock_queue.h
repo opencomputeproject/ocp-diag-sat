@@ -65,20 +65,12 @@ class FineLockPEQueue {
   // Helper function to get a random page entry with given predicate,
   // ie, page_is_valid() or page_is_empty() as defined above.
   bool GetRandomWithPredicate(struct page_entry *pe,
-<<<<<<< HEAD
                               bool (*pred_func)(struct page_entry *));
-=======
-                              bool (*pred_func)(struct page_entry *));
->>>>>>> 9deccb9 (Copied source code over from the original SAT and got it build for x86)
 
   // Helper function to get a random page entry with given predicate,
   // ie, page_is_valid() or page_is_empty() as defined above.
   bool GetRandomWithPredicateTag(struct page_entry *pe,
-<<<<<<< HEAD
                                  bool (*pred_func)(struct page_entry *),
-=======
-                                 bool (*pred_func)(struct page_entry *),
->>>>>>> 9deccb9 (Copied source code over from the original SAT and got it build for x86)
                                  int32 tag);
 
   // Used to make a linear congruential path through the queue.
@@ -86,7 +78,6 @@ class FineLockPEQueue {
   int64 getC(int64 m);
 
   pthread_mutex_t *pagelocks_;  // Per-page-entry locks.
-<<<<<<< HEAD
   struct page_entry *pages_;    // Where page entries are held.
   uint64 q_size_;               // Size of the queue.
   int64 page_size_;             // For calculating array index from offset.
@@ -97,24 +88,11 @@ class FineLockPEQueue {
     kTouch = 2
   }               // Measure the number of touches on each page.
   queue_metric_;  // What to measure in the 'tries' field.
-=======
-  struct page_entry *pages_;  // Where page entries are held.
-  uint64 q_size_;             // Size of the queue.
-  int64 page_size_;           // For calculating array index from offset.
-
-  enum {
-    kTries = 1,  // Measure the number of attempts in the queue
-                 // before getting a matching page.
-    kTouch = 2
-  }                  // Measure the number of touches on each page.
-  queue_metric_;     // What to measure in the 'tries' field.
->>>>>>> 9deccb9 (Copied source code over from the original SAT and got it build for x86)
 
   // Progress pseudorandomly through the queue. It's required that we can find
   // every value in the list, but progressing through the same order each time
   // causes bunching of pages, leading to long seach times for the correct
   // type of pages.
-<<<<<<< HEAD
   int64 a_;          // 'a' multiplicative value for progressing
                      // linear congruentially through the list.
   int64 c_;          // 'c' additive value for prgressing randomly
@@ -125,18 +103,6 @@ class FineLockPEQueue {
                      // list.
 
   uint64 rand_seed_[4];           // Random number state for 4 generators.
-=======
-  int64 a_;          // 'a' multiplicative value for progressing
-                     // linear congruentially through the list.
-  int64 c_;          // 'c' additive value for prgressing randomly
-                     // through the list.
-  int64 modlength_;  // 'm' mod value for linear congruential
-                     // generator. Used when q_size_ doesn't
-                     // generate a good progression through the
-                     // list.
-
-  uint64 rand_seed_[4];  // Random number state for 4 generators.
->>>>>>> 9deccb9 (Copied source code over from the original SAT and got it build for x86)
   pthread_mutex_t randlocks_[4];  // Per-random-generator locks.
 
   DISALLOW_COPY_AND_ASSIGN(FineLockPEQueue);

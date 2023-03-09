@@ -33,8 +33,7 @@ class Sat {
   virtual ~Sat();
 
   // Read configuration from arguments. Called first.
-  bool ParseArgs(int argc, char **argv);
-  virtual bool CheckGoogleSpecificArgs(int argc, char **argv, int *i);
+  bool ParseArgs(int argc, const char **argv);
   // Initialize data structures, subclasses, and resources,
   // based on command line args.
   // Called after ParseArgs().
@@ -135,6 +134,7 @@ class Sat {
 
   // Command line arguments.
   string cmdline_;
+  string cmdline_json_;
 
   // Memory and test configuration.
   int runtime_seconds_;               // Seconds to run.
