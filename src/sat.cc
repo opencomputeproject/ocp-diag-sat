@@ -23,6 +23,8 @@
 #include <sys/times.h>
 #include <unistd.h>
 
+#include <memory>
+
 // #define __USE_GNU
 // #define __USE_LARGEFILE64
 #include <fcntl.h>
@@ -34,17 +36,15 @@
 // so these includes are correct.
 #include "disk_blocks.h"
 #include "logger.h"
+#include "ocpdiag/core/results/data_model/input_model.h"
+#include "ocpdiag/core/results/data_model/input_model_helpers.h"
 #include "os.h"
 #include "sat.h"
 #include "sattypes.h"
 #include "worker.h"
 
 // stressapptest versioning here.
-#ifndef PACKAGE_VERSION
 static const char *kVersion = "1.0.0";
-#else
-static const char *kVersion = PACKAGE_VERSION;
-#endif
 
 // Global stressapptest reference, for use by signal handler.
 // This makes Sat objects not safe for multiple instances.
@@ -541,6 +541,14 @@ bool Sat::PrintVersion() {
 // This needs to be called before Run(), and after ParseArgs().
 // Returns true on success, false on error, and will exit() on help message.
 bool Sat::Initialize() {
+  test_run_ = std::make_unique<ocpdiag::results::TestRun>(
+      ocpdiag::results::TestRunStart{
+          .name = "Stress App Test",
+          .version = kVersion,
+          .command_line = cmdline_,
+          .parameters_json = cmdline_json_,
+      });
+
   g_sat = this;
 
   // Initializes sync'd log file to ensure output is saved.
@@ -759,7 +767,7 @@ Sat::~Sat() {
 // Configures SAT from command line arguments.
 // This will call exit() given a request for
 // self-documentation or unexpected args.
-bool Sat::ParseArgs(int argc, char **argv) {
+bool Sat::ParseArgs(int argc, const char **argv) {
   int i;
   uint64 filesize = page_length_ * disk_pages_;
 
@@ -942,19 +950,15 @@ bool Sat::ParseArgs(int argc, char **argv) {
     // Run threads that listen for incoming SAT net connections.
     ARG_KVALUE("--listen", listen_threads_, 1);
 
-    if (CheckGoogleSpecificArgs(argc, argv, &i)) {
-      continue;
-    }
-
     ARG_IVALUE("--channel_hash", channel_hash_);
     ARG_IVALUE("--channel_width", channel_width_);
 
     if (!strcmp(argv[i], "--memory_channel")) {
       i++;
       if (i < argc) {
-        char *channel = argv[i];
+        const char *channel = argv[i];
         channels_.push_back(vector<string>());
-        while (char *next = strchr(channel, ',')) {
+        while (const char *next = strchr(channel, ',')) {
           channels_.back().push_back(string(channel, next - channel));
           channel = next + 1;
         }
@@ -1054,12 +1058,8 @@ bool Sat::ParseArgs(int argc, char **argv) {
     }
   }
 
-  // Print each argument.
-  cmdline_json_ = "{";
-  for (int i = 0; i < argc; i++) {
-    if (i) cmdline_ += " ";
-    cmdline_ += argv[i];
-    }
+  cmdline_ = ocpdiag::results::CommandLineStringFromMainArgs(argc, argv);
+  cmdline_json_ = ocpdiag::results::ParameterJsonFromMainArgs(argc, argv);
 
   return true;
 }
@@ -1141,11 +1141,6 @@ void Sat::PrintHelp() {
       " --memory_channel u1,u2   defines a comma-separated list of names "
       "for dram packages in a memory channel. Use multiple times to "
       "define multiple channels.\n");
-}
-
-bool Sat::CheckGoogleSpecificArgs(int argc, char **argv, int *i) {
-  // Do nothing, no google-specific argument on public stressapptest
-  return false;
 }
 
 void Sat::GoogleOsOptions(std::map<std::string, std::string> *options) {

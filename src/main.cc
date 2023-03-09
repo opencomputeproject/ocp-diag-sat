@@ -9,7 +9,7 @@
 #include "sat.h"
 #include "sattypes.h"
 
-int main(int argc, char **argv) {
+int main(int argc, const char **argv) {
   Sat *sat = SatFactory();
   if (sat == NULL) {
     logprintf(0, "Process Error: failed to allocate Sat object\n");
