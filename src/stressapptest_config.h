@@ -1,3 +1,9 @@
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 /* src/stressapptest_config.h.  Generated from stressapptest_config.h.in by
  * configure.  */
 /* src/stressapptest_config.h.in.  Generated from configure.ac by autoheader. */
