@@ -19,30 +19,29 @@
 #include <pthread.h>
 #include <sched.h>
 #include <signal.h>
-#include <stdlib.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <unistd.h>
-
 #include <sys/select.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <sys/times.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
 // These are necessary, but on by default
 // #define __USE_GNU
 // #define __USE_LARGEFILE64
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <netdb.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <linux/unistd.h>  // for gettid
+#include <netdb.h>
+#include <sys/socket.h>
 
 // For size of block device
-#include <sys/ioctl.h>
 #include <linux/fs.h>
+#include <sys/ioctl.h>
 // For asynchronous I/O
 #ifdef HAVE_LIBAIO_H
 #include <libaio.h>
@@ -66,35 +65,31 @@
 // Syscalls
 // Why ubuntu, do you hate gettid so bad?
 #if !defined(__NR_gettid)
-  #define __NR_gettid             224
+#define __NR_gettid 224
 #endif
 
 #define gettid() syscall(__NR_gettid)
 #if !defined(CPU_SETSIZE)
-_syscall3(int, sched_getaffinity, pid_t, pid,
-          unsigned int, len, cpu_set_t*, mask)
-_syscall3(int, sched_setaffinity, pid_t, pid,
-          unsigned int, len, cpu_set_t*, mask)
+_syscall3(int, sched_getaffinity, pid_t, pid, unsigned int, len, cpu_set_t *,
+          mask) _syscall3(int, sched_setaffinity, pid_t, pid, unsigned int, len,
+                          cpu_set_t *, mask)
 #endif
 
-namespace {
+    namespace {
   // Work around the sad fact that there are two (gnu, xsi) incompatible
   // versions of strerror_r floating around google. Awesome.
   bool sat_strerror(int err, char *buf, int len) {
     buf[0] = 0;
-    char *errmsg = reinterpret_cast<char*>(strerror_r(err, buf, len));
+    char *errmsg = reinterpret_cast<char *>(strerror_r(err, buf, len));
     int retval = reinterpret_cast<int64>(errmsg);
-    if (retval == 0)
-      return true;
-    if (retval == -1)
-      return false;
+    if (retval == 0) return true;
+    if (retval == -1) return false;
     if (errmsg != buf) {
       strncpy(buf, errmsg, len - 1);
       buf[len - 1] = 0;
     }
     return true;
   }
-
 
   inline uint64 addr_to_tag(void *address) {
     return reinterpret_cast<uint64>(address);
@@ -104,17 +99,17 @@ namespace {
 #if !defined(O_DIRECT)
 // Sometimes this isn't available.
 // Disregard if it's not defined.
-  #define O_DIRECT            0
+#define O_DIRECT 0
 #endif
 
 // A struct to hold captured errors, for later reporting.
 struct ErrorRecord {
-  uint64 actual;  // This is the actual value read.
-  uint64 reread;  // This is the actual value, reread.
-  uint64 expected;  // This is what it should have been.
-  uint64 *vaddr;  // This is where it was (or wasn't).
-  char *vbyteaddr;  // This is byte specific where the data was (or wasn't).
-  uint64 paddr;  // This is the bus address, if available.
+  uint64 actual;     // This is the actual value read.
+  uint64 reread;     // This is the actual value, reread.
+  uint64 expected;   // This is what it should have been.
+  uint64 *vaddr;     // This is where it was (or wasn't).
+  char *vbyteaddr;   // This is byte specific where the data was (or wasn't).
+  uint64 paddr;      // This is the bus address, if available.
   uint64 *tagvaddr;  // This holds the tag value if this data was tagged.
   uint64 tagpaddr;  // This holds the physical address corresponding to the tag.
   uint32 lastcpu;  // This holds the CPU recorded as probably writing this data.
@@ -123,7 +118,7 @@ struct ErrorRecord {
 
 // This is a helper function to create new threads with pthreads.
 static void *ThreadSpawnerGeneric(void *ptr) {
-  WorkerThread *worker = static_cast<WorkerThread*>(ptr);
+  WorkerThread *worker = static_cast<WorkerThread *>(ptr);
   worker->StartRoutine();
   return NULL;
 }
@@ -141,8 +136,8 @@ void WorkerStatus::Initialize() {
   sat_assert(0 == pthread_rwlock_init(&status_rwlock_, &attrs));
 
 #ifdef HAVE_PTHREAD_BARRIERS
-  sat_assert(0 == pthread_barrier_init(&pause_barrier_, NULL,
-                                       num_workers_ + 1));
+  sat_assert(0 ==
+             pthread_barrier_init(&pause_barrier_, NULL, num_workers_ + 1));
   sat_assert(0 == pthread_rwlock_init(&pause_rwlock_, &attrs));
 #endif
 
@@ -158,18 +153,15 @@ void WorkerStatus::Destroy() {
 }
 
 void WorkerStatus::PauseWorkers() {
-  if (SetStatus(PAUSE) != PAUSE)
-    WaitOnPauseBarrier();
+  if (SetStatus(PAUSE) != PAUSE) WaitOnPauseBarrier();
 }
 
 void WorkerStatus::ResumeWorkers() {
-  if (SetStatus(RUN) == PAUSE)
-    WaitOnPauseBarrier();
+  if (SetStatus(RUN) == PAUSE) WaitOnPauseBarrier();
 }
 
 void WorkerStatus::StopWorkers() {
-  if (SetStatus(STOP) == PAUSE)
-    WaitOnPauseBarrier();
+  if (SetStatus(STOP) == PAUSE) WaitOnPauseBarrier();
 }
 
 bool WorkerStatus::ContinueRunning(bool *paused) {
@@ -200,16 +192,13 @@ bool WorkerStatus::ContinueRunning(bool *paused) {
   }
 }
 
-bool WorkerStatus::ContinueRunningNoPause() {
-  return (GetStatus() != STOP);
-}
+bool WorkerStatus::ContinueRunningNoPause() { return (GetStatus() != STOP); }
 
 void WorkerStatus::RemoveSelf() {
   // Acquire a read lock on status_rwlock_ while (status_ != PAUSE).
   for (;;) {
     AcquireStatusReadLock();
-    if (status_ != PAUSE)
-      break;
+    if (status_ != PAUSE) break;
     // We need to obey PauseWorkers() just like ContinueRunning() would, so that
     // the other threads won't wait on pause_barrier_ forever.
     ReleaseStatusLock();
@@ -237,7 +226,6 @@ void WorkerStatus::RemoveSelf() {
   ReleaseStatusLock();
 }
 
-
 // Parent thread class.
 WorkerThread::WorkerThread() {
   status_ = false;
@@ -253,9 +241,7 @@ WorkerThread::WorkerThread() {
 WorkerThread::~WorkerThread() {}
 
 // Constructors. Just init some default values.
-FillThread::FillThread() {
-  num_pages_to_fill_ = 0;
-}
+FillThread::FillThread() { num_pages_to_fill_ = 0; }
 
 // Initialize file name to empty.
 FileThread::FileThread() {
@@ -283,16 +269,13 @@ NetworkThread::NetworkThread() {
 }
 
 // Initialize?
-NetworkSlaveThread::NetworkSlaveThread() {
-}
+NetworkSlaveThread::NetworkSlaveThread() {}
 
 // Initialize?
-NetworkListenThread::NetworkListenThread() {
-}
+NetworkListenThread::NetworkListenThread() {}
 
 // Init member variables.
-void WorkerThread::InitThread(int thread_num_init,
-                              class Sat *sat_init,
+void WorkerThread::InitThread(int thread_num_init, class Sat *sat_init,
                               class OsLayer *os_init,
                               class PatternList *patternlist_init,
                               WorkerStatus *worker_status) {
@@ -311,7 +294,6 @@ void WorkerThread::InitThread(int thread_num_init,
   tag_mode_ = sat_->tag_mode();
 }
 
-
 // Use pthreads to prioritize a system thread.
 bool WorkerThread::InitPriority() {
   // This doesn't affect performance that much, and may not be too safe.
@@ -322,8 +304,7 @@ bool WorkerThread::InitPriority() {
               cpuset_format(&cpu_mask_).c_str());
 
   logprintf(11, "Log: Thread %d running on core ID %d mask %s (%s).\n",
-            thread_num_, sched_getcpu(),
-            CurrentCpusFormat().c_str(),
+            thread_num_, sched_getcpu(), CurrentCpusFormat().c_str(),
             cpuset_format(&cpu_mask_).c_str());
 #if 0
   if (priority_ == High) {
@@ -351,9 +332,10 @@ int WorkerThread::SpawnThread() {
   if (result) {
     char buf[256];
     sat_strerror(result, buf, sizeof(buf));
-    logprintf(0, "Process Error: pthread_create "
-                  "failed - error %d %s\n", result,
-              buf);
+    logprintf(0,
+              "Process Error: pthread_create "
+              "failed - error %d %s\n",
+              result, buf);
     status_ = false;
     return false;
   }
@@ -363,9 +345,7 @@ int WorkerThread::SpawnThread() {
 }
 
 // Kill the worker thread with SIGINT.
-bool WorkerThread::KillThread() {
-  return (pthread_kill(thread_, SIGINT) == 0);
-}
+bool WorkerThread::KillThread() { return (pthread_kill(thread_, SIGINT) == 0); }
 
 // Block until thread has exited.
 bool WorkerThread::JoinThread() {
@@ -380,7 +360,6 @@ bool WorkerThread::JoinThread() {
   return (!result);
 }
 
-
 void WorkerThread::StartRoutine() {
   InitPriority();
   StartThreadTimer();
@@ -388,7 +367,6 @@ void WorkerThread::StartRoutine() {
   StopThreadTimer();
   worker_status_->RemoveSelf();
 }
-
 
 // Thread work loop. Execute until marked finished.
 bool WorkerThread::Work() {
@@ -400,7 +378,6 @@ bool WorkerThread::Work() {
 
   return false;
 }
-
 
 // Returns CPU mask of CPUs available to this process,
 // Conceptually, each bit represents a logical CPU, ie:
@@ -415,7 +392,6 @@ bool WorkerThread::AvailableCpus(cpu_set_t *cpuset) {
 #endif
 }
 
-
 // Returns CPU mask of CPUs this thread is bound to,
 // Conceptually, each bit represents a logical CPU, ie:
 //   mask = 3  (11b):   cpu0, 1
@@ -429,7 +405,6 @@ bool WorkerThread::CurrentCpus(cpu_set_t *cpuset) {
 #endif
 }
 
-
 // Bind worker thread to specified CPU(s)
 //   Args:
 //     thread_mask: cpu_set_t representing CPUs, ie
@@ -441,8 +416,7 @@ bool WorkerThread::CurrentCpus(cpu_set_t *cpuset) {
 bool WorkerThread::BindToCpus(const cpu_set_t *thread_mask) {
   cpu_set_t process_mask;
   AvailableCpus(&process_mask);
-  if (cpuset_isequal(thread_mask, &process_mask))
-    return true;
+  if (cpuset_isequal(thread_mask, &process_mask)) return true;
 
   logprintf(11, "Log: available CPU mask - %s\n",
             cpuset_format(&process_mask).c_str());
@@ -455,7 +429,8 @@ bool WorkerThread::BindToCpus(const cpu_set_t *thread_mask) {
   }
 #ifdef HAVE_SCHED_GETAFFINITY
   if (sat_->use_affinity()) {
-    return (sched_setaffinity(gettid(), sizeof(*thread_mask), thread_mask) == 0);
+    return (sched_setaffinity(gettid(), sizeof(*thread_mask), thread_mask) ==
+            0);
   } else {
     logprintf(11, "Log: Skipping CPU affinity set.\n");
   }
@@ -463,13 +438,9 @@ bool WorkerThread::BindToCpus(const cpu_set_t *thread_mask) {
   return true;
 }
 
-
 // A worker thread can yield itself to give up CPU until it's scheduled again.
 //   Returns true on success, false on error.
-bool WorkerThread::YieldSelf() {
-  return (sched_yield() == 0);
-}
-
+bool WorkerThread::YieldSelf() { return (sched_yield() == 0); }
 
 // Fill this page with its pattern.
 bool WorkerThread::FillPage(struct page_entry *pe) {
@@ -484,7 +455,7 @@ bool WorkerThread::FillPage(struct page_entry *pe) {
 
   // Mask is the bitmask of indexes used by the pattern.
   // It is the pattern size -1. Size is always a power of 2.
-  uint64 *memwords = static_cast<uint64*>(pe->addr);
+  uint64 *memwords = static_cast<uint64 *>(pe->addr);
   int length = sat_->page_length();
 
   if (tag_mode_) {
@@ -513,7 +484,6 @@ bool WorkerThread::FillPage(struct page_entry *pe) {
 
   return 1;
 }
-
 
 // Tell the thread how many pages to fill.
 void FillThread::SetFillPages(int64 num_pages_to_fill_init) {
@@ -545,7 +515,6 @@ bool FillThread::FillPageRandom(struct page_entry *pe) {
   return FillPage(pe);
 }
 
-
 // Memory fill work loop. Execute until alloted pages filled.
 bool FillThread::Work() {
   bool result = true;
@@ -560,7 +529,8 @@ bool FillThread::Work() {
   while (IsReadyToRun() && (loops < num_pages_to_fill_)) {
     result = result && sat_->GetEmpty(&pe);
     if (!result) {
-      logprintf(0, "Process Error: fill_thread failed to pop pages, "
+      logprintf(0,
+                "Process Error: fill_thread failed to pop pages, "
                 "bailing\n");
       break;
     }
@@ -572,7 +542,8 @@ bool FillThread::Work() {
     // Put the page back on the queue.
     result = result && sat_->PutValid(&pe);
     if (!result) {
-      logprintf(0, "Process Error: fill_thread failed to push pages, "
+      logprintf(0,
+                "Process Error: fill_thread failed to push pages, "
                 "bailing\n");
       break;
     }
@@ -587,10 +558,8 @@ bool FillThread::Work() {
   return result;
 }
 
-
 // Print error information about a data miscompare.
-void WorkerThread::ProcessError(struct ErrorRecord *error,
-                                int priority,
+void WorkerThread::ProcessError(struct ErrorRecord *error, int priority,
                                 const char *message) {
   char dimm_string[256] = "";
 
@@ -600,17 +569,16 @@ void WorkerThread::ProcessError(struct ErrorRecord *error,
   os_->Flush(error->vaddr);
   error->reread = *(error->vaddr);
 
-  char *good = reinterpret_cast<char*>(&(error->expected));
-  char *bad = reinterpret_cast<char*>(&(error->actual));
+  char *good = reinterpret_cast<char *>(&(error->expected));
+  char *bad = reinterpret_cast<char *>(&(error->actual));
 
   sat_assert(error->expected != error->actual);
   unsigned int offset = 0;
   for (offset = 0; offset < (sizeof(error->expected) - 1); offset++) {
-    if (good[offset] != bad[offset])
-      break;
+    if (good[offset] != bad[offset]) break;
   }
 
-  error->vbyteaddr = reinterpret_cast<char*>(error->vaddr) + offset;
+  error->vbyteaddr = reinterpret_cast<char *>(error->vaddr) + offset;
 
   // Find physical address if possible.
   error->paddr = os_->VirtualToPhysical(error->vbyteaddr);
@@ -621,26 +589,17 @@ void WorkerThread::ProcessError(struct ErrorRecord *error,
   // Report parseable error.
   if (priority < 5) {
     // Run miscompare error through diagnoser for logging and reporting.
-    os_->error_diagnoser_->AddMiscompareError(dimm_string,
-                                              reinterpret_cast<uint64>
-                                              (error->vaddr), 1);
+    os_->error_diagnoser_->AddMiscompareError(
+        dimm_string, reinterpret_cast<uint64>(error->vaddr), 1);
 
     logprintf(priority,
               "%s: miscompare on CPU %d(<-%d) at %p(0x%llx:%s): "
               "read:0x%016llx, reread:0x%016llx expected:0x%016llx. '%s'%s.\n",
-              message,
-              core_id,
-              error->lastcpu,
-              error->vaddr,
-              error->paddr,
-              dimm_string,
-              error->actual,
-              error->reread,
-              error->expected,
+              message, core_id, error->lastcpu, error->vaddr, error->paddr,
+              dimm_string, error->actual, error->reread, error->expected,
               (error->patternname) ? error->patternname : "None",
               (error->reread == error->expected) ? " read error" : "");
   }
-
 
   // Overwrite incorrect data with correct data to prevent
   // future miscompares when this data is reused.
@@ -648,11 +607,8 @@ void WorkerThread::ProcessError(struct ErrorRecord *error,
   os_->Flush(error->vaddr);
 }
 
-
-
 // Print error information about a data miscompare.
-void FileThread::ProcessError(struct ErrorRecord *error,
-                              int priority,
+void FileThread::ProcessError(struct ErrorRecord *error, int priority,
                               const char *message) {
   char dimm_string[256] = "";
 
@@ -660,17 +616,16 @@ void FileThread::ProcessError(struct ErrorRecord *error,
   os_->Flush(error->vaddr);
   error->reread = *(error->vaddr);
 
-  char *good = reinterpret_cast<char*>(&(error->expected));
-  char *bad = reinterpret_cast<char*>(&(error->actual));
+  char *good = reinterpret_cast<char *>(&(error->expected));
+  char *bad = reinterpret_cast<char *>(&(error->actual));
 
   sat_assert(error->expected != error->actual);
   unsigned int offset = 0;
   for (offset = 0; offset < (sizeof(error->expected) - 1); offset++) {
-    if (good[offset] != bad[offset])
-      break;
+    if (good[offset] != bad[offset]) break;
   }
 
-  error->vbyteaddr = reinterpret_cast<char*>(error->vaddr) + offset;
+  error->vbyteaddr = reinterpret_cast<char *>(error->vaddr) + offset;
 
   // Find physical address if possible.
   error->paddr = os_->VirtualToPhysical(error->vbyteaddr);
@@ -682,30 +637,21 @@ void FileThread::ProcessError(struct ErrorRecord *error,
   // track src/dst memory addresses. Otherwise catagorize as general
   // mememory miscompare for CRC checking everywhere else.
   if (crc_page_ != -1) {
-    int miscompare_byteoffset = static_cast<char*>(error->vbyteaddr) -
-                                static_cast<char*>(page_recs_[crc_page_].dst);
-    os_->error_diagnoser_->AddHDDMiscompareError(devicename_,
-                                                 crc_page_,
-                                                 miscompare_byteoffset,
-                                                 page_recs_[crc_page_].src,
-                                                 page_recs_[crc_page_].dst);
+    int miscompare_byteoffset = static_cast<char *>(error->vbyteaddr) -
+                                static_cast<char *>(page_recs_[crc_page_].dst);
+    os_->error_diagnoser_->AddHDDMiscompareError(
+        devicename_, crc_page_, miscompare_byteoffset,
+        page_recs_[crc_page_].src, page_recs_[crc_page_].dst);
   } else {
-    os_->error_diagnoser_->AddMiscompareError(dimm_string,
-                                              reinterpret_cast<uint64>
-                                              (error->vaddr), 1);
+    os_->error_diagnoser_->AddMiscompareError(
+        dimm_string, reinterpret_cast<uint64>(error->vaddr), 1);
   }
 
   logprintf(priority,
             "%s: miscompare on %s at %p(0x%llx:%s): read:0x%016llx, "
             "reread:0x%016llx expected:0x%016llx\n",
-            message,
-            devicename_.c_str(),
-            error->vaddr,
-            error->paddr,
-            dimm_string,
-            error->actual,
-            error->reread,
-            error->expected,
+            message, devicename_.c_str(), error->vaddr, error->paddr,
+            dimm_string, error->actual, error->reread, error->expected,
             (error->patternname) ? error->patternname : "None");
 
   // Overwrite incorrect data with correct data to prevent
@@ -714,23 +660,19 @@ void FileThread::ProcessError(struct ErrorRecord *error,
   os_->Flush(error->vaddr);
 }
 
-
 // Do a word by word result check of a region.
 // Print errors on mismatches.
-int WorkerThread::CheckRegion(void *addr,
-                              class Pattern *pattern,
-                              uint32 lastcpu,
-                              int64 length,
-                              int offset,
+int WorkerThread::CheckRegion(void *addr, class Pattern *pattern,
+                              uint32 lastcpu, int64 length, int offset,
                               int64 pattern_offset) {
-  uint64 *memblock = static_cast<uint64*>(addr);
+  uint64 *memblock = static_cast<uint64 *>(addr);
   const int kErrorLimit = 128;
   int errors = 0;
   int overflowerrors = 0;  // Count of overflowed errors.
   bool page_error = false;
   string errormessage("Hardware Error");
   struct ErrorRecord
-    recorded[kErrorLimit];  // Queued errors for later printing.
+      recorded[kErrorLimit];  // Queued errors for later printing.
 
   // For each word in the data region.
   for (int i = 0; i < length / wordsize_; i++) {
@@ -747,7 +689,6 @@ int WorkerThread::CheckRegion(void *addr,
     if (tag_mode_ && ((reinterpret_cast<uint64>(&memblock[i]) & 0x3f) == 0)) {
       expected = addr_to_tag(&memblock[i]);
     }
-
 
     // If the value is incorrect, save an error record for later printing.
     if (actual != expected) {
@@ -782,8 +723,7 @@ int WorkerThread::CheckRegion(void *addr,
       unsigned int badend = 0;
 
       // Don't match against ourself!
-      if (pattern == altpattern)
-        continue;
+      if (pattern == altpattern) continue;
 
       for (int i = 0; i < length / wordsize_; i++) {
         uint64 actual = memblock[i];
@@ -839,17 +779,15 @@ int WorkerThread::CheckRegion(void *addr,
         // it will simply be reported twice. Once here and once below
         // when processing the error queue.
         ProcessError(&recorded[0], 0, errormessage.c_str());
-        logprintf(0, "Block Error: (%p) pattern %s instead of %s, "
+        logprintf(0,
+                  "Block Error: (%p) pattern %s instead of %s, "
                   "%d bytes from offset 0x%x to 0x%x\n",
-                  &memblock[badstart],
-                  altpattern->name(), pattern->name(),
-                  blockerrors * wordsize_,
-                  offset + badstart * wordsize_,
+                  &memblock[badstart], altpattern->name(), pattern->name(),
+                  blockerrors * wordsize_, offset + badstart * wordsize_,
                   offset + badend * wordsize_);
       }
     }
   }
-
 
   // Process error queue after all errors have been recorded.
   for (int err = 0; err < errors; err++) {
@@ -910,7 +848,7 @@ int WorkerThread::CrcCheckPage(struct page_entry *srcpe) {
   int errors = 0;
 
   const AdlerChecksum *expectedcrc = srcpe->pattern->crc();
-  uint64 *memblock = static_cast<uint64*>(srcpe->addr);
+  uint64 *memblock = static_cast<uint64 *>(srcpe->addr);
   int blocks = sat_->page_length() / blocksize;
   for (int currentblock = 0; currentblock < blocks; currentblock++) {
     uint64 *memslice = memblock + currentblock * blockwords;
@@ -924,18 +862,16 @@ int WorkerThread::CrcCheckPage(struct page_entry *srcpe) {
 
     // If the CRC does not match, we'd better look closer.
     if (!crc.Equals(*expectedcrc)) {
-      logprintf(11, "Log: CrcCheckPage Falling through to slow compare, "
+      logprintf(11,
+                "Log: CrcCheckPage Falling through to slow compare, "
                 "CRC mismatch %s != %s\n",
-                crc.ToHexString().c_str(),
-                expectedcrc->ToHexString().c_str());
-      int errorcount = CheckRegion(memslice,
-                                   srcpe->pattern,
-                                   srcpe->lastcpu,
-                                   blocksize,
-                                   currentblock * blocksize, 0);
+                crc.ToHexString().c_str(), expectedcrc->ToHexString().c_str());
+      int errorcount = CheckRegion(memslice, srcpe->pattern, srcpe->lastcpu,
+                                   blocksize, currentblock * blocksize, 0);
       if (errorcount == 0) {
-        logprintf(0, "Log: CrcCheckPage CRC mismatch %s != %s, "
-                     "but no miscompares found.\n",
+        logprintf(0,
+                  "Log: CrcCheckPage CRC mismatch %s != %s, "
+                  "but no miscompares found.\n",
                   crc.ToHexString().c_str(),
                   expectedcrc->ToHexString().c_str());
       }
@@ -947,19 +883,14 @@ int WorkerThread::CrcCheckPage(struct page_entry *srcpe) {
   int leftovers = sat_->page_length() % blocksize;
   if (leftovers) {
     uint64 *memslice = memblock + blocks * blockwords;
-    errors += CheckRegion(memslice,
-                          srcpe->pattern,
-                          srcpe->lastcpu,
-                          leftovers,
+    errors += CheckRegion(memslice, srcpe->pattern, srcpe->lastcpu, leftovers,
                           blocks * blocksize, 0);
   }
   return errors;
 }
 
-
 // Print error information about a data miscompare.
-void WorkerThread::ProcessTagError(struct ErrorRecord *error,
-                                   int priority,
+void WorkerThread::ProcessTagError(struct ErrorRecord *error, int priority,
                                    const char *message) {
   char dimm_string[256] = "";
   char tag_dimm_string[256] = "";
@@ -978,7 +909,7 @@ void WorkerThread::ProcessTagError(struct ErrorRecord *error,
 
   sat_assert(error->expected != error->actual);
 
-  error->vbyteaddr = reinterpret_cast<char*>(error->vaddr);
+  error->vbyteaddr = reinterpret_cast<char *>(error->vaddr);
 
   // Find physical address if possible.
   error->paddr = os_->VirtualToPhysical(error->vbyteaddr);
@@ -995,18 +926,10 @@ void WorkerThread::ProcessTagError(struct ErrorRecord *error,
               "%s: Tag from %p(0x%llx:%s) (%s) "
               "miscompare on CPU %d(0x%s) at %p(0x%llx:%s): "
               "read:0x%016llx, reread:0x%016llx expected:0x%016llx\n",
-              message,
-              error->tagvaddr, error->tagpaddr,
-              tag_dimm_string,
-              read_error ? "read error" : "write error",
-              core_id,
-              CurrentCpusFormat().c_str(),
-              error->vaddr,
-              error->paddr,
-              dimm_string,
-              error->actual,
-              error->reread,
-              error->expected);
+              message, error->tagvaddr, error->tagpaddr, tag_dimm_string,
+              read_error ? "read error" : "write error", core_id,
+              CurrentCpusFormat().c_str(), error->vaddr, error->paddr,
+              dimm_string, error->actual, error->reread, error->expected);
   }
 
   errorcount_ += 1;
@@ -1017,12 +940,8 @@ void WorkerThread::ProcessTagError(struct ErrorRecord *error,
   os_->Flush(error->vaddr);
 }
 
-
 // Print out and log a tag error.
-bool WorkerThread::ReportTagError(
-    uint64 *mem64,
-    uint64 actual,
-    uint64 tag) {
+bool WorkerThread::ReportTagError(uint64 *mem64, uint64 actual, uint64 tag) {
   struct ErrorRecord er;
   er.actual = actual;
 
@@ -1030,15 +949,14 @@ bool WorkerThread::ReportTagError(
   er.vaddr = mem64;
 
   // Generate vaddr from tag.
-  er.tagvaddr = reinterpret_cast<uint64*>(actual);
+  er.tagvaddr = reinterpret_cast<uint64 *>(actual);
 
   ProcessTagError(&er, 0, "Hardware Error");
   return true;
 }
 
 // C implementation of Adler memory copy, with memory tagging.
-bool WorkerThread::AdlerAddrMemcpyC(uint64 *dstmem64,
-                                    uint64 *srcmem64,
+bool WorkerThread::AdlerAddrMemcpyC(uint64 *dstmem64, uint64 *srcmem64,
                                     unsigned int size_in_bytes,
                                     AdlerChecksum *checksum,
                                     struct page_entry *pe) {
@@ -1068,8 +986,7 @@ bool WorkerThread::AdlerAddrMemcpyC(uint64 *dstmem64,
       uint64 src_tag = addr_to_tag(&srcmem64[i]);
       uint64 dst_tag = addr_to_tag(&dstmem64[i]);
       // Detect if tags have been corrupted.
-      if (data.l64 != src_tag)
-        ReportTagError(&srcmem64[i], data.l64, src_tag);
+      if (data.l64 != src_tag) ReportTagError(&srcmem64[i], data.l64, src_tag);
       if (dstdata.l64 != dst_tag)
         ReportTagError(&dstmem64[i], dstdata.l64, dst_tag);
 
@@ -1080,7 +997,7 @@ bool WorkerThread::AdlerAddrMemcpyC(uint64 *dstmem64,
       a1 = a1 + data.l32.h;
       b1 = b1 + a1;
 
-      data.l64  = dst_tag;
+      data.l64 = dst_tag;
       dstmem64[i] = data.l64;
 
     } else {
@@ -1108,8 +1025,7 @@ bool WorkerThread::AdlerAddrMemcpyC(uint64 *dstmem64,
 // x86_64 SSE2 assembly implementation of Adler memory copy, with address
 // tagging added as a second step. This is useful for debugging failures
 // that only occur when SSE / nontemporal writes are used.
-bool WorkerThread::AdlerAddrMemcpyWarm(uint64 *dstmem64,
-                                       uint64 *srcmem64,
+bool WorkerThread::AdlerAddrMemcpyWarm(uint64 *dstmem64, uint64 *srcmem64,
                                        unsigned int size_in_bytes,
                                        AdlerChecksum *checksum,
                                        struct page_entry *pe) {
@@ -1137,8 +1053,7 @@ bool WorkerThread::AdlerAddrMemcpyWarm(uint64 *dstmem64,
 }
 
 // Retag pages..
-bool WorkerThread::TagAddrC(uint64 *memwords,
-                            unsigned int size_in_bytes) {
+bool WorkerThread::TagAddrC(uint64 *memwords, unsigned int size_in_bytes) {
   // Mask is the bitmask of indexes used by the pattern.
   // It is the pattern size -1. Size is always a power of 2.
 
@@ -1153,8 +1068,7 @@ bool WorkerThread::TagAddrC(uint64 *memwords,
 }
 
 // C implementation of Adler memory crc.
-bool WorkerThread::AdlerAddrCrcC(uint64 *srcmem64,
-                                 unsigned int size_in_bytes,
+bool WorkerThread::AdlerAddrCrcC(uint64 *srcmem64, unsigned int size_in_bytes,
                                  AdlerChecksum *checksum,
                                  struct page_entry *pe) {
   // Use this data wrapper to access memory with 64bit read/write.
@@ -1180,8 +1094,7 @@ bool WorkerThread::AdlerAddrCrcC(uint64 *srcmem64,
       data.l64 = srcmem64[i];
       uint64 src_tag = addr_to_tag(&srcmem64[i]);
       // Check that tags match expected.
-      if (data.l64 != src_tag)
-        ReportTagError(&srcmem64[i], data.l64, src_tag);
+      if (data.l64 != src_tag) ReportTagError(&srcmem64[i], data.l64, src_tag);
 
       data.l32.l = pattern->pattern(i << 1);
       data.l32.h = pattern->pattern((i << 1) + 1);
@@ -1219,8 +1132,8 @@ int WorkerThread::CrcCopyPage(struct page_entry *dstpe,
   int blocks = sat_->page_length() / blocksize;
 
   // Base addresses for memory copy
-  uint64 *targetmembase = static_cast<uint64*>(dstpe->addr);
-  uint64 *sourcemembase = static_cast<uint64*>(srcpe->addr);
+  uint64 *targetmembase = static_cast<uint64 *>(dstpe->addr);
+  uint64 *sourcemembase = static_cast<uint64 *>(srcpe->addr);
   // Remember the expected CRC
   const AdlerChecksum *expectedcrc = srcpe->pattern->crc();
 
@@ -1237,17 +1150,16 @@ int WorkerThread::CrcCopyPage(struct page_entry *dstpe,
 
     // Investigate miscompares.
     if (!crc.Equals(*expectedcrc)) {
-      logprintf(11, "Log: CrcCopyPage Falling through to slow compare, "
-                "CRC mismatch %s != %s\n", crc.ToHexString().c_str(),
-                expectedcrc->ToHexString().c_str());
-      int errorcount = CheckRegion(sourcemem,
-                                   srcpe->pattern,
-                                   srcpe->lastcpu,
-                                   blocksize,
-                                   currentblock * blocksize, 0);
+      logprintf(11,
+                "Log: CrcCopyPage Falling through to slow compare, "
+                "CRC mismatch %s != %s\n",
+                crc.ToHexString().c_str(), expectedcrc->ToHexString().c_str());
+      int errorcount = CheckRegion(sourcemem, srcpe->pattern, srcpe->lastcpu,
+                                   blocksize, currentblock * blocksize, 0);
       if (errorcount == 0) {
-        logprintf(0, "Log: CrcCopyPage CRC mismatch %s != %s, "
-                     "but no miscompares found. Retrying with fresh data.\n",
+        logprintf(0,
+                  "Log: CrcCopyPage CRC mismatch %s != %s, "
+                  "but no miscompares found. Retrying with fresh data.\n",
                   crc.ToHexString().c_str(),
                   expectedcrc->ToHexString().c_str());
         if (!tag_mode_) {
@@ -1255,16 +1167,14 @@ int WorkerThread::CrcCopyPage(struct page_entry *dstpe,
           // This data should have any corruption read originally while
           // calculating the CRC.
           memcpy(sourcemem, targetmem, blocksize);
-          errorcount = CheckRegion(sourcemem,
-                                   srcpe->pattern,
-                                   srcpe->lastcpu,
-                                   blocksize,
-                                   currentblock * blocksize, 0);
+          errorcount = CheckRegion(sourcemem, srcpe->pattern, srcpe->lastcpu,
+                                   blocksize, currentblock * blocksize, 0);
           if (errorcount == 0) {
             int core_id = sched_getcpu();
-            logprintf(0, "Process Error: CPU %d(0x%s) CrcCopyPage "
-                         "CRC mismatch %s != %s, "
-                         "but no miscompares found on second pass.\n",
+            logprintf(0,
+                      "Process Error: CPU %d(0x%s) CrcCopyPage "
+                      "CRC mismatch %s != %s, "
+                      "but no miscompares found on second pass.\n",
                       core_id, CurrentCpusFormat().c_str(),
                       crc.ToHexString().c_str(),
                       expectedcrc->ToHexString().c_str());
@@ -1277,7 +1187,7 @@ int WorkerThread::CrcCopyPage(struct page_entry *dstpe,
             er.patternname = srcpe->pattern->name();
             ProcessError(&er, 0, "Hardware Error");
             errors += 1;
-            errorcount_ ++;
+            errorcount_++;
           }
         }
       }
@@ -1291,10 +1201,7 @@ int WorkerThread::CrcCopyPage(struct page_entry *dstpe,
     uint64 *targetmem = targetmembase + blocks * blockwords;
     uint64 *sourcemem = sourcemembase + blocks * blockwords;
 
-    errors += CheckRegion(sourcemem,
-                          srcpe->pattern,
-                          srcpe->lastcpu,
-                          leftovers,
+    errors += CheckRegion(sourcemem, srcpe->pattern, srcpe->lastcpu, leftovers,
                           blocks * blocksize, 0);
     int leftoverwords = leftovers / wordsize_;
     for (int i = 0; i < leftoverwords; i++) {
@@ -1315,8 +1222,6 @@ int WorkerThread::CrcCopyPage(struct page_entry *dstpe,
   return errors;
 }
 
-
-
 // Invert a block of memory quickly, traversing downwards.
 int InvertThread::InvertPageDown(struct page_entry *srcpe) {
   const int invert_flush_interval = kCacheLineSize / sizeof(unsigned int);
@@ -1325,12 +1230,13 @@ int InvertThread::InvertPageDown(struct page_entry *srcpe) {
   int blocks = sat_->page_length() / blocksize;
 
   // Base addresses for memory copy
-  unsigned int* iter = static_cast<unsigned int *>(srcpe->addr) + (blocks * blockwords);
-  unsigned int* rend = static_cast<unsigned int *>(srcpe->addr);
+  unsigned int *iter =
+      static_cast<unsigned int *>(srcpe->addr) + (blocks * blockwords);
+  unsigned int *rend = static_cast<unsigned int *>(srcpe->addr);
 
   OsLayer::FastFlushSync();
-  while(iter != rend) {
-    for(int i = 0; i < invert_flush_interval; ++i) {
+  while (iter != rend) {
+    for (int i = 0; i < invert_flush_interval; ++i) {
       --iter;
       *iter = ~(*iter);
     }
@@ -1349,12 +1255,13 @@ int InvertThread::InvertPageUp(struct page_entry *srcpe) {
   int blocks = sat_->page_length() / blocksize;
 
   // Base addresses for memory copy
-  unsigned int* iter = static_cast<unsigned int *>(srcpe->addr);
-  unsigned int* end = static_cast<unsigned int *>(srcpe->addr) + (blocks * blockwords);
+  unsigned int *iter = static_cast<unsigned int *>(srcpe->addr);
+  unsigned int *end =
+      static_cast<unsigned int *>(srcpe->addr) + (blocks * blockwords);
 
   OsLayer::FastFlushSync();
-  while(iter != end) {
-    for(int i = 0; i < invert_flush_interval; ++i) {
+  while (iter != end) {
+    for (int i = 0; i < invert_flush_interval; ++i) {
       *iter = ~(*iter);
       ++iter;
     }
@@ -1376,8 +1283,8 @@ int WorkerThread::CrcWarmCopyPage(struct page_entry *dstpe,
   int blocks = sat_->page_length() / blocksize;
 
   // Base addresses for memory copy
-  uint64 *targetmembase = static_cast<uint64*>(dstpe->addr);
-  uint64 *sourcemembase = static_cast<uint64*>(srcpe->addr);
+  uint64 *targetmembase = static_cast<uint64 *>(dstpe->addr);
+  uint64 *sourcemembase = static_cast<uint64 *>(srcpe->addr);
   // Remember the expected CRC
   const AdlerChecksum *expectedcrc = srcpe->pattern->crc();
 
@@ -1394,34 +1301,31 @@ int WorkerThread::CrcWarmCopyPage(struct page_entry *dstpe,
 
     // Investigate miscompares.
     if (!crc.Equals(*expectedcrc)) {
-      logprintf(11, "Log: CrcWarmCopyPage Falling through to slow compare, "
-                "CRC mismatch %s != %s\n", crc.ToHexString().c_str(),
-                expectedcrc->ToHexString().c_str());
-      int errorcount = CheckRegion(sourcemem,
-                                   srcpe->pattern,
-                                   srcpe->lastcpu,
-                                   blocksize,
-                                   currentblock * blocksize, 0);
+      logprintf(11,
+                "Log: CrcWarmCopyPage Falling through to slow compare, "
+                "CRC mismatch %s != %s\n",
+                crc.ToHexString().c_str(), expectedcrc->ToHexString().c_str());
+      int errorcount = CheckRegion(sourcemem, srcpe->pattern, srcpe->lastcpu,
+                                   blocksize, currentblock * blocksize, 0);
       if (errorcount == 0) {
-        logprintf(0, "Log: CrcWarmCopyPage CRC mismatch expected: %s != actual: %s, "
-                     "but no miscompares found. Retrying with fresh data.\n",
-                  expectedcrc->ToHexString().c_str(),
-                  crc.ToHexString().c_str() );
+        logprintf(
+            0,
+            "Log: CrcWarmCopyPage CRC mismatch expected: %s != actual: %s, "
+            "but no miscompares found. Retrying with fresh data.\n",
+            expectedcrc->ToHexString().c_str(), crc.ToHexString().c_str());
         if (!tag_mode_) {
           // Copy the data originally read from this region back again.
           // This data should have any corruption read originally while
           // calculating the CRC.
           memcpy(sourcemem, targetmem, blocksize);
-          errorcount = CheckRegion(sourcemem,
-                                   srcpe->pattern,
-                                   srcpe->lastcpu,
-                                   blocksize,
-                                   currentblock * blocksize, 0);
+          errorcount = CheckRegion(sourcemem, srcpe->pattern, srcpe->lastcpu,
+                                   blocksize, currentblock * blocksize, 0);
           if (errorcount == 0) {
             int core_id = sched_getcpu();
-            logprintf(0, "Process Error: CPU %d(0x%s) CrciWarmCopyPage "
-                         "CRC mismatch %s != %s, "
-                         "but no miscompares found on second pass.\n",
+            logprintf(0,
+                      "Process Error: CPU %d(0x%s) CrciWarmCopyPage "
+                      "CRC mismatch %s != %s, "
+                      "but no miscompares found on second pass.\n",
                       core_id, CurrentCpusFormat().c_str(),
                       crc.ToHexString().c_str(),
                       expectedcrc->ToHexString().c_str());
@@ -1432,8 +1336,8 @@ int WorkerThread::CrcWarmCopyPage(struct page_entry *dstpe,
             er.lastcpu = srcpe->lastcpu;
             er.patternname = srcpe->pattern->name();
             ProcessError(&er, 0, "Hardware Error");
-            errors ++;
-            errorcount_ ++;
+            errors++;
+            errorcount_++;
           }
         }
       }
@@ -1447,10 +1351,7 @@ int WorkerThread::CrcWarmCopyPage(struct page_entry *dstpe,
     uint64 *targetmem = targetmembase + blocks * blockwords;
     uint64 *sourcemem = sourcemembase + blocks * blockwords;
 
-    errors += CheckRegion(sourcemem,
-                          srcpe->pattern,
-                          srcpe->lastcpu,
-                          leftovers,
+    errors += CheckRegion(sourcemem, srcpe->pattern, srcpe->lastcpu, leftovers,
                           blocks * blocksize, 0);
     int leftoverwords = leftovers / wordsize_;
     for (int i = 0; i < leftoverwords; i++) {
@@ -1462,7 +1363,6 @@ int WorkerThread::CrcWarmCopyPage(struct page_entry *dstpe,
   dstpe->pattern = srcpe->pattern;
   dstpe->lastcpu = sched_getcpu();
 
-
   // Clean clean clean the errors away.
   if (errors) {
     // TODO(nsanders): Maybe we should patch rather than fill? Filling may
@@ -1471,8 +1371,6 @@ int WorkerThread::CrcWarmCopyPage(struct page_entry *dstpe,
   }
   return errors;
 }
-
-
 
 // Memory check work loop. Execute until done, then exhaust pages.
 bool CheckThread::Work() {
@@ -1488,7 +1386,8 @@ bool CheckThread::Work() {
     result = result && sat_->GetValid(&pe);
     if (!result) {
       if (IsReadyToRunNoPause())
-        logprintf(0, "Process Error: check_thread failed to pop pages, "
+        logprintf(0,
+                  "Process Error: check_thread failed to pop pages, "
                   "bailing\n");
       else
         result = true;
@@ -1505,7 +1404,8 @@ bool CheckThread::Work() {
     else
       result = result && sat_->PutEmpty(&pe);
     if (!result) {
-      logprintf(0, "Process Error: check_thread failed to push pages, "
+      logprintf(0,
+                "Process Error: check_thread failed to push pages, "
                 "bailing\n");
       break;
     }
@@ -1519,7 +1419,6 @@ bool CheckThread::Work() {
   return result;
 }
 
-
 // Memory copy work loop. Execute until marked done.
 bool CopyThread::Work() {
   struct page_entry src;
@@ -1527,17 +1426,19 @@ bool CopyThread::Work() {
   bool result = true;
   int64 loops = 0;
 
-  logprintf(9, "Log: Starting copy thread %d: cpu %s, "
+  logprintf(9,
+            "Log: Starting copy thread %d: cpu %s, "
             "mem %x, warm: %d, has_vector: %d\n",
-            thread_num_, cpuset_format(&cpu_mask_).c_str(), tag_,
-            sat_->warm(), os_->has_vector());
+            thread_num_, cpuset_format(&cpu_mask_).c_str(), tag_, sat_->warm(),
+            os_->has_vector());
 
   while (IsReadyToRun()) {
     // Pop the needed pages.
     result = result && sat_->GetValid(&src, tag_);
     result = result && sat_->GetEmpty(&dst, tag_);
     if (!result) {
-      logprintf(0, "Process Error: copy_thread failed to pop pages, "
+      logprintf(0,
+                "Process Error: copy_thread failed to pop pages, "
                 "bailing\n");
       break;
     }
@@ -1545,7 +1446,7 @@ bool CopyThread::Work() {
     // Force errors for unittests.
     if (sat_->error_injection()) {
       if ((random() % 50000) == 8) {
-        char *addr = reinterpret_cast<char*>(src.addr);
+        char *addr = reinterpret_cast<char *>(src.addr);
         int offset = random() % sat_->page_length();
         addr[offset] = 0xba;
       }
@@ -1573,7 +1474,8 @@ bool CopyThread::Work() {
     YieldSelf();
 
     if (!result) {
-      logprintf(0, "Process Error: copy_thread failed to push pages, "
+      logprintf(0,
+                "Process Error: copy_thread failed to push pages, "
                 "bailing\n");
       break;
     }
@@ -1599,13 +1501,13 @@ bool InvertThread::Work() {
     // Pop the needed pages.
     result = result && sat_->GetValid(&src);
     if (!result) {
-      logprintf(0, "Process Error: invert_thread failed to pop pages, "
+      logprintf(0,
+                "Process Error: invert_thread failed to pop pages, "
                 "bailing\n");
       break;
     }
 
-    if (sat_->strict())
-      CrcCheckPage(&src);
+    if (sat_->strict()) CrcCheckPage(&src);
 
     // For the same reason CopyThread yields itself (see YieldSelf comment
     // in CopyThread::Work(), InvertThread yields itself after each invert
@@ -1620,12 +1522,12 @@ bool InvertThread::Work() {
     InvertPageUp(&src);
     YieldSelf();
 
-    if (sat_->strict())
-      CrcCheckPage(&src);
+    if (sat_->strict()) CrcCheckPage(&src);
 
     result = result && sat_->PutValid(&src);
     if (!result) {
-      logprintf(0, "Process Error: invert_thread failed to push pages, "
+      logprintf(0,
+                "Process Error: invert_thread failed to push pages, "
                 "bailing\n");
       break;
     }
@@ -1638,7 +1540,6 @@ bool InvertThread::Work() {
             thread_num_, status_, pages_copied_);
   return result;
 }
-
 
 // Set file name to use for File IO.
 void FileThread::SetFile(const char *filename_init) {
@@ -1674,7 +1575,7 @@ bool FileThread::CloseFile(int fd) {
 bool FileThread::SectorTagPage(struct page_entry *src, int block) {
   int page_length = sat_->page_length();
   struct FileThread::SectorTag *tag =
-    (struct FileThread::SectorTag *)(src->addr);
+      (struct FileThread::SectorTag *)(src->addr);
 
   // Tag each sector.
   unsigned char magic = ((0xba + thread_num_) & 0xff);
@@ -1695,7 +1596,8 @@ bool FileThread::WritePageToFile(int fd, struct page_entry *src) {
   if (size != page_length) {
     os_->ErrorReport(devicename_.c_str(), "write-error", 1);
     errorcount_++;
-    logprintf(0, "Block Error: file_thread failed to write, "
+    logprintf(0,
+              "Block Error: file_thread failed to write, "
               "bailing\n");
     return false;
   }
@@ -1710,25 +1612,21 @@ bool FileThread::WritePages(int fd) {
   lseek(fd, 0, SEEK_SET);
   for (int i = 0; i < sat_->disk_pages(); i++) {
     struct page_entry src;
-    if (!GetValidPage(&src))
-      return false;
+    if (!GetValidPage(&src)) return false;
     // Save expected pattern.
     page_recs_[i].pattern = src.pattern;
     page_recs_[i].src = src.addr;
 
     // Check data correctness.
-    if (strict)
-      CrcCheckPage(&src);
+    if (strict) CrcCheckPage(&src);
 
     SectorTagPage(&src, i);
 
     bool result = WritePageToFile(fd, &src);
 
-    if (!PutEmptyPage(&src))
-      return false;
+    if (!PutEmptyPage(&src)) return false;
 
-    if (!result)
-      return false;
+    if (!result) return false;
   }
   return os_->FlushPageCache();  // If O_DIRECT worked, this will be a NOP.
 }
@@ -1741,7 +1639,8 @@ bool FileThread::ReadPageFromFile(int fd, struct page_entry *dst) {
   int64 size = read(fd, dst->addr, page_length);
   if (size != page_length) {
     os_->ErrorReport(devicename_.c_str(), "read-error", 1);
-    logprintf(0, "Block Error: file_thread failed to read, "
+    logprintf(0,
+              "Block Error: file_thread failed to read, "
               "bailing\n");
     errorcount_++;
     return false;
@@ -1764,18 +1663,17 @@ bool FileThread::SectorValidatePage(const struct PageRec &page,
 
   // Cast data block into an array of tagged sectors.
   struct FileThread::SectorTag *tag =
-  (struct FileThread::SectorTag *)(dst->addr);
+      (struct FileThread::SectorTag *)(dst->addr);
 
   sat_assert(sizeof(*tag) == 512);
 
   // Error injection.
   if (sat_->error_injection()) {
     if (calls == 2) {
-      for (int badsec = 8; badsec < 17; badsec++)
-        tag[badsec].pass = 27;
+      for (int badsec = 8; badsec < 17; badsec++) tag[badsec].pass = 27;
     }
     if (calls == 18) {
-      (static_cast<int32*>(dst->addr))[27] = 0xbadda7a;
+      (static_cast<int32 *>(dst->addr))[27] = 0xbadda7a;
     }
   }
 
@@ -1784,8 +1682,7 @@ bool FileThread::SectorValidatePage(const struct PageRec &page,
   unsigned char magic = ((0xba + thread_num_) & 0xff);
   for (int sec = 0; sec < page_length / 512; sec++) {
     // Check magic tag.
-    if ((tag[sec].magic != magic) ||
-        (tag[sec].block != (block & 0xff)) ||
+    if ((tag[sec].magic != magic) || (tag[sec].block != (block & 0xff)) ||
         (tag[sec].sector != (sec & 0xff)) ||
         (tag[sec].pass != (pass_ & 0xff))) {
       // Offset calculation for tag location.
@@ -1800,23 +1697,20 @@ bool FileThread::SectorValidatePage(const struct PageRec &page,
       // Run sector tag error through diagnoser for logging and reporting.
       errorcount_ += 1;
       os_->error_diagnoser_->AddHDDSectorTagError(devicename_, tag[sec].block,
-                                                  offset,
-                                                  tag[sec].sector,
+                                                  offset, tag[sec].sector,
                                                   page.src, page.dst);
 
       errorcount_ += 1;
-      logprintf(5, "Sector Error: Sector tag @ 0x%x, pass %d/%d. "
+      logprintf(5,
+                "Sector Error: Sector tag @ 0x%x, pass %d/%d. "
                 "sec %x/%x, block %d/%d, magic %x/%x, File: %s \n",
-                block * page_length + 512 * sec,
-                (pass_ & 0xff), (unsigned int)tag[sec].pass,
-                sec, (unsigned int)tag[sec].sector,
-                block, (unsigned int)tag[sec].block,
-                magic, (unsigned int)tag[sec].magic,
-                filename_.c_str());
+                block * page_length + 512 * sec, (pass_ & 0xff),
+                (unsigned int)tag[sec].pass, sec, (unsigned int)tag[sec].sector,
+                block, (unsigned int)tag[sec].block, magic,
+                (unsigned int)tag[sec].magic, filename_.c_str());
 
       // Keep track of first and last bad sector.
-      if (firstsector == -1)
-        firstsector = (block * page_length / 512) + sec;
+      if (firstsector == -1) firstsector = (block * page_length / 512) + sec;
       lastsector = (block * page_length / 512) + sec;
       badsector = true;
     }
@@ -1828,8 +1722,7 @@ bool FileThread::SectorValidatePage(const struct PageRec &page,
   // If we found sector errors:
   if (badsector == true) {
     logprintf(5, "Log: file sector miscompare at offset %x-%x. File: %s\n",
-              firstsector * 512,
-              ((lastsector + 1) * 512) - 1,
+              firstsector * 512, ((lastsector + 1) * 512) - 1,
               filename_.c_str());
 
     // Either exit immediately, or patch the data up and continue.
@@ -1838,8 +1731,7 @@ bool FileThread::SectorValidatePage(const struct PageRec &page,
     } else {
       // Patch up bad pages.
       for (int block = (firstsector * 512) / page_length;
-          block <= (lastsector * 512) / page_length;
-          block++) {
+           block <= (lastsector * 512) / page_length; block++) {
         unsigned int *memblock = static_cast<unsigned int *>(dst->addr);
         int length = page_length / wordsize_;
         for (int i = 0; i < length; i++) {
@@ -1865,8 +1757,9 @@ bool FileThread::PagePrepare() {
     int result = (local_page_ == 0);
 #endif
     if (result) {
-      logprintf(0, "Process Error: disk thread posix_memalign "
-                   "returned %d (fail)\n",
+      logprintf(0,
+                "Process Error: disk thread posix_memalign "
+                "returned %d (fail)\n",
                 result);
       status_ = false;
       return false;
@@ -1874,7 +1767,6 @@ bool FileThread::PagePrepare() {
   }
   return true;
 }
-
 
 // Remove memory allocated for data transfer.
 bool FileThread::PageTeardown() {
@@ -1885,13 +1777,10 @@ bool FileThread::PageTeardown() {
   return true;
 }
 
-
-
 // Get memory for an incoming data transfer..
 bool FileThread::GetEmptyPage(struct page_entry *dst) {
   if (page_io_) {
-    if (!sat_->GetEmpty(dst))
-      return false;
+    if (!sat_->GetEmpty(dst)) return false;
   } else {
     dst->addr = local_page_;
     dst->offset = 0;
@@ -1904,8 +1793,7 @@ bool FileThread::GetEmptyPage(struct page_entry *dst) {
 // Get memory for an outgoing data transfer..
 bool FileThread::GetValidPage(struct page_entry *src) {
   struct page_entry tmp;
-  if (!sat_->GetValid(&tmp))
-    return false;
+  if (!sat_->GetValid(&tmp)) return false;
   if (page_io_) {
     *src = tmp;
     return true;
@@ -1913,18 +1801,15 @@ bool FileThread::GetValidPage(struct page_entry *src) {
     src->addr = local_page_;
     src->offset = 0;
     CrcCopyPage(src, &tmp);
-    if (!sat_->PutValid(&tmp))
-      return false;
+    if (!sat_->PutValid(&tmp)) return false;
   }
   return true;
 }
 
-
 // Throw out a used empty page.
 bool FileThread::PutEmptyPage(struct page_entry *src) {
   if (page_io_) {
-    if (!sat_->PutEmpty(src))
-      return false;
+    if (!sat_->PutEmpty(src)) return false;
   }
   return true;
 }
@@ -1932,8 +1817,7 @@ bool FileThread::PutEmptyPage(struct page_entry *src) {
 // Throw out a used, filled page.
 bool FileThread::PutValidPage(struct page_entry *src) {
   if (page_io_) {
-    if (!sat_->PutValid(src))
-      return false;
+    if (!sat_->PutValid(src)) return false;
   }
   return true;
 }
@@ -1948,8 +1832,7 @@ bool FileThread::ReadPages(int fd) {
   lseek(fd, 0, SEEK_SET);
   for (int i = 0; i < sat_->disk_pages(); i++) {
     struct page_entry dst;
-    if (!GetEmptyPage(&dst))
-      return false;
+    if (!GetEmptyPage(&dst)) return false;
     // Retrieve expected pattern.
     dst.pattern = page_recs_[i].pattern;
     dst.lastcpu = sched_getcpu();
@@ -1958,8 +1841,8 @@ bool FileThread::ReadPages(int fd) {
 
     // Read from the file into destination page.
     if (!ReadPageFromFile(fd, &dst)) {
-        PutEmptyPage(&dst);
-        return false;
+      PutEmptyPage(&dst);
+      return false;
     }
 
     SectorValidatePage(page_recs_[i], &dst, i);
@@ -1970,7 +1853,8 @@ bool FileThread::ReadPages(int fd) {
       crc_page_ = i;
       int errors = CrcCheckPage(&dst);
       if (errors) {
-        logprintf(5, "Log: file miscompare at block %d, "
+        logprintf(5,
+                  "Log: file miscompare at block %d, "
                   "offset %x-%x. File: %s\n",
                   i, i * page_length, ((i + 1) * page_length) - 1,
                   filename_.c_str());
@@ -1979,8 +1863,7 @@ bool FileThread::ReadPages(int fd) {
       crc_page_ = -1;
       errorcount_ += errors;
     }
-    if (!PutValidPage(&dst))
-      return false;
+    if (!PutValidPage(&dst)) return false;
   }
   return result;
 }
@@ -1991,9 +1874,7 @@ bool FileThread::Work() {
   int64 loops = 0;
 
   logprintf(9, "Log: Starting file thread %d, file %s, device %s\n",
-            thread_num_,
-            filename_.c_str(),
-            devicename_.c_str());
+            thread_num_, filename_.c_str(), devicename_.c_str());
 
   if (!PagePrepare()) {
     status_ = false;
@@ -2018,12 +1899,10 @@ bool FileThread::Work() {
   // Loop until done.
   while (IsReadyToRun()) {
     // Do the file write.
-    if (!(result = result && WritePages(fd)))
-      break;
+    if (!(result = result && WritePages(fd))) break;
 
     // Do the file read.
-    if (!(result = result && ReadPages(fd)))
-      break;
+    if (!(result = result && ReadPages(fd))) break;
 
     loops++;
     pass_ = loops;
@@ -2043,9 +1922,7 @@ bool FileThread::Work() {
   return true;
 }
 
-bool NetworkThread::IsNetworkStopSet() {
-  return !IsReadyToRunNoPause();
-}
+bool NetworkThread::IsNetworkStopSet() { return !IsReadyToRunNoPause(); }
 
 bool NetworkSlaveThread::IsNetworkStopSet() {
   // This thread has no completion status.
@@ -2114,7 +1991,7 @@ bool NetworkListenThread::Listen() {
   sa.sin_addr.s_addr = INADDR_ANY;
   sa.sin_port = htons(kNetworkPort);
 
-  if (-1 == ::bind(sock_, (struct sockaddr*)&sa, sizeof(struct sockaddr))) {
+  if (-1 == ::bind(sock_, (struct sockaddr *)&sa, sizeof(struct sockaddr))) {
     char buf[256];
     sat_strerror(errno, buf, sizeof(buf));
     logprintf(0, "Process Error: Cannot bind socket: %s\n", buf);
@@ -2128,20 +2005,20 @@ bool NetworkListenThread::Listen() {
 
 // Wait for a connection from a network traffic generation thread.
 bool NetworkListenThread::Wait() {
-    fd_set rfds;
-    struct timeval tv;
-    int retval;
+  fd_set rfds;
+  struct timeval tv;
+  int retval;
 
-    // Watch sock_ to see when it has input.
-    FD_ZERO(&rfds);
-    FD_SET(sock_, &rfds);
-    // Wait up to five seconds.
-    tv.tv_sec = 5;
-    tv.tv_usec = 0;
+  // Watch sock_ to see when it has input.
+  FD_ZERO(&rfds);
+  FD_SET(sock_, &rfds);
+  // Wait up to five seconds.
+  tv.tv_sec = 5;
+  tv.tv_usec = 0;
 
-    retval = select(sock_ + 1, &rfds, NULL, NULL, &tv);
+  retval = select(sock_ + 1, &rfds, NULL, NULL, &tv);
 
-    return (retval > 0);
+  return (retval > 0);
 }
 
 // Wait for a connection from a network traffic generation thread.
@@ -2150,7 +2027,7 @@ bool NetworkListenThread::GetConnection(int *pnewsock) {
   socklen_t size = sizeof(struct sockaddr_in);
 
   int newsock = accept(sock_, reinterpret_cast<struct sockaddr *>(&sa), &size);
-  if (newsock < 0)  {
+  if (newsock < 0) {
     logprintf(0, "Process Error: Did not receive connection\n");
     pages_copied_ = 0;
     status_ = false;
@@ -2163,7 +2040,7 @@ bool NetworkListenThread::GetConnection(int *pnewsock) {
 // Send a page, return false if a page was not sent.
 bool NetworkThread::SendPage(int sock, struct page_entry *src) {
   int page_length = sat_->page_length();
-  char *address = static_cast<char*>(src->addr);
+  char *address = static_cast<char *>(src->addr);
 
   // Send our data over the network.
   int size = page_length;
@@ -2173,8 +2050,9 @@ bool NetworkThread::SendPage(int sock, struct page_entry *src) {
       if (!IsNetworkStopSet()) {
         char buf[256] = "";
         sat_strerror(errno, buf, sizeof(buf));
-        logprintf(0, "Process Error: Thread %d, "
-                     "Network write failed, bailing. (%s)\n",
+        logprintf(0,
+                  "Process Error: Thread %d, "
+                  "Network write failed, bailing. (%s)\n",
                   thread_num_, buf);
         status_ = false;
       }
@@ -2188,7 +2066,7 @@ bool NetworkThread::SendPage(int sock, struct page_entry *src) {
 // Receive a page. Return false if a page was not received.
 bool NetworkThread::ReceivePage(int sock, struct page_entry *dst) {
   int page_length = sat_->page_length();
-  char *address = static_cast<char*>(dst->addr);
+  char *address = static_cast<char *>(dst->addr);
 
   // Maybe we will get our data back again, maybe not.
   int size = page_length;
@@ -2207,22 +2085,22 @@ bool NetworkThread::ReceivePage(int sock, struct page_entry *dst) {
           char buf[256] = "";
           sat_strerror(err, buf, sizeof(buf));
           // Print why we failed.
-          logprintf(0, "Process Error: Thread %d, "
-                       "Network read failed, bailing (%s).\n",
+          logprintf(0,
+                    "Process Error: Thread %d, "
+                    "Network read failed, bailing (%s).\n",
                     thread_num_, buf);
           status_ = false;
           // Print arguments and results.
           logprintf(0, "Log: recv(%d, address %x, size %x, 0) == %x, err %d\n",
-                    sock, address + (page_length - size),
-                    size, transferred, err);
-          if ((transferred == 0) &&
-              (page_length - size < 512) &&
+                    sock, address + (page_length - size), size, transferred,
+                    err);
+          if ((transferred == 0) && (page_length - size < 512) &&
               (page_length - size > 0)) {
             // Print null terminated data received, to see who's been
             // sending us supicious unwanted data.
             address[page_length - size] = 0;
-            logprintf(0, "Log: received  %d bytes: '%s'\n",
-                      page_length - size, address);
+            logprintf(0, "Log: received  %d bytes: '%s'\n", page_length - size,
+                      address);
           }
         }
       }
@@ -2236,14 +2114,12 @@ bool NetworkThread::ReceivePage(int sock, struct page_entry *dst) {
 // Network IO work loop. Execute until marked done.
 // Return true if the thread ran as expected.
 bool NetworkThread::Work() {
-  logprintf(9, "Log: Starting network thread %d, ip %s\n",
-            thread_num_,
+  logprintf(9, "Log: Starting network thread %d, ip %s\n", thread_num_,
             ipaddr_);
 
   // Make a socket.
   int sock = 0;
-  if (!CreateSocket(&sock))
-    return false;
+  if (!CreateSocket(&sock)) return false;
 
   // Network IO loop requires network slave thread to have already initialized.
   // We will sleep here for awhile to ensure that the slave thread will be
@@ -2251,13 +2127,10 @@ bool NetworkThread::Work() {
   // Sleep for 15 seconds.
   sat_sleep(15);
   logprintf(9, "Log: Starting execution of network thread %d, ip %s\n",
-            thread_num_,
-            ipaddr_);
-
+            thread_num_, ipaddr_);
 
   // Connect to a slave thread.
-  if (!Connect(sock))
-    return false;
+  if (!Connect(sock)) return false;
 
   // Loop until done.
   bool result = true;
@@ -2269,36 +2142,34 @@ bool NetworkThread::Work() {
     result = result && sat_->GetValid(&src);
     result = result && sat_->GetEmpty(&dst);
     if (!result) {
-      logprintf(0, "Process Error: net_thread failed to pop pages, "
+      logprintf(0,
+                "Process Error: net_thread failed to pop pages, "
                 "bailing\n");
       break;
     }
 
     // Check data correctness.
-    if (strict)
-      CrcCheckPage(&src);
+    if (strict) CrcCheckPage(&src);
 
     // Do the network write.
-    if (!(result = result && SendPage(sock, &src)))
-      break;
+    if (!(result = result && SendPage(sock, &src))) break;
 
     // Update pattern reference to reflect new contents.
     dst.pattern = src.pattern;
     dst.lastcpu = sched_getcpu();
 
     // Do the network read.
-    if (!(result = result && ReceivePage(sock, &dst)))
-      break;
+    if (!(result = result && ReceivePage(sock, &dst))) break;
 
     // Ensure that the transfer ended up with correct data.
-    if (strict)
-      CrcCheckPage(&dst);
+    if (strict) CrcCheckPage(&dst);
 
     // Return all of our pages to the queue.
     result = result && sat_->PutValid(&dst);
     result = result && sat_->PutEmpty(&src);
     if (!result) {
-      logprintf(0, "Process Error: net_thread failed to push pages, "
+      logprintf(0,
+                "Process Error: net_thread failed to push pages, "
                 "bailing\n");
       break;
     }
@@ -2311,8 +2182,9 @@ bool NetworkThread::Work() {
   // Clean up.
   CloseSocket(sock);
 
-  logprintf(9, "Log: Completed %d: network thread status %d, "
-               "%d pages copied\n",
+  logprintf(9,
+            "Log: Completed %d: network thread status %d, "
+            "%d pages copied\n",
             thread_num_, status_, pages_copied_);
   return result;
 }
@@ -2340,7 +2212,7 @@ bool NetworkListenThread::ReapSlaves() {
   logprintf(12, "Log: Joining all outstanding threads\n");
 
   for (size_t i = 0; i < child_workers_.size(); i++) {
-    NetworkSlaveThread& child_thread = child_workers_[i]->thread;
+    NetworkSlaveThread &child_thread = child_workers_[i]->thread;
     logprintf(12, "Log: Joining slave thread %d\n", i);
     child_thread.JoinThread();
     if (child_thread.GetStatus() != 1) {
@@ -2360,8 +2232,7 @@ bool NetworkListenThread::ReapSlaves() {
 // Network listener IO work loop. Execute until marked done.
 // Return false on fatal software error.
 bool NetworkListenThread::Work() {
-  logprintf(9, "Log: Starting network listen thread %d\n",
-            thread_num_);
+  logprintf(9, "Log: Starting network listen thread %d\n", thread_num_);
 
   // Make a socket.
   sock_ = 0;
@@ -2412,15 +2283,12 @@ bool NetworkListenThread::Work() {
 }
 
 // Set network reflector socket struct.
-void NetworkSlaveThread::SetSock(int sock) {
-  sock_ = sock;
-}
+void NetworkSlaveThread::SetSock(int sock) { sock_ = sock; }
 
 // Network reflector IO work loop. Execute until marked done.
 // Return false on fatal software error.
 bool NetworkSlaveThread::Work() {
-  logprintf(9, "Log: Starting network slave thread %d\n",
-            thread_num_);
+  logprintf(9, "Log: Starting network slave thread %d\n", thread_num_);
 
   // Verify that we have a socket.
   int sock = sock_;
@@ -2440,8 +2308,9 @@ bool NetworkSlaveThread::Work() {
   int result = (local_page == 0);
 #endif
   if (result) {
-    logprintf(0, "Process Error: net slave posix_memalign "
-                 "returned %d (fail)\n",
+    logprintf(0,
+              "Process Error: net slave posix_memalign "
+              "returned %d (fail)\n",
               result);
     status_ = false;
     return false;
@@ -2454,12 +2323,10 @@ bool NetworkSlaveThread::Work() {
   // the socket is still sending and receiving data.
   while (1) {
     // Do the network read.
-    if (!ReceivePage(sock, &page))
-      break;
+    if (!ReceivePage(sock, &page)) break;
 
     // Do the network write.
-    if (!SendPage(sock, &page))
-      break;
+    if (!SendPage(sock, &page)) break;
 
     loops++;
   }
@@ -2505,8 +2372,7 @@ bool CpuStressThread::Work() {
     YieldSelf();
   } while (IsReadyToRun());
 
-  logprintf(9, "Log: Finished CPU stress thread %d:\n",
-            thread_num_);
+  logprintf(9, "Log: Finished CPU stress thread %d:\n", thread_num_);
   status_ = true;
   return true;
 }
@@ -2533,8 +2399,7 @@ uint64 CpuCacheCoherencyThread::SimpleRandom(uint64 seed) {
 // Worked thread to test the cache coherency of the CPUs
 // Return false on fatal sw error.
 bool CpuCacheCoherencyThread::Work() {
-  logprintf(9, "Log: Starting the Cache Coherency thread %d\n",
-            cc_thread_num_);
+  logprintf(9, "Log: Starting the Cache Coherency thread %d\n", cc_thread_num_);
   int64 time_start, time_end;
 
   // Use a slightly more robust random number for the initial
@@ -2589,8 +2454,7 @@ bool CpuCacheCoherencyThread::Work() {
       // Reset the cachline member's value for the next run.
       cc_cacheline_data_[cline_num].num[offset] = 0;
     }
-    if (sat_->error_injection())
-      cc_global_num = -1;
+    if (sat_->error_injection()) cc_global_num = -1;
 
     // Since the count is only stored in a byte, to squeeze more into a
     // single cache line, only compare it as a byte.  In the event that there
@@ -2610,7 +2474,8 @@ bool CpuCacheCoherencyThread::Work() {
   // inc_rate is the no. of increments per second.
   double inc_rate = total_inc * 1e6 / us_elapsed;
 
-  logprintf(4, "Stats: CC Thread(%d): Time=%llu us,"
+  logprintf(4,
+            "Stats: CC Thread(%d): Time=%llu us,"
             " Increments=%llu, Increments/sec = %.6lf\n",
             cc_thread_num_, us_elapsed, total_inc, inc_rate);
   logprintf(9, "Log: Finished CPU Cache Coherency thread %d:\n",
@@ -2631,11 +2496,11 @@ DiskThread::DiskThread(DiskBlockTable *block_table) {
   queue_size_ = ((cache_size_ / write_block_size_) * 3) / 2;
   blocks_per_segment_ = 32;
 
-  read_threshold_ = 100000;         // 100ms is a reasonable limit for
-  write_threshold_ = 100000;        // reading/writing a sector
+  read_threshold_ = 100000;   // 100ms is a reasonable limit for
+  write_threshold_ = 100000;  // reading/writing a sector
 
-  read_timeout_ = 5000000;          // 5 seconds should be long enough for a
-  write_timeout_ = 5000000;         // timout for reading/writing
+  read_timeout_ = 5000000;   // 5 seconds should be long enough for a
+  write_timeout_ = 5000000;  // timout for reading/writing
 
   device_sectors_ = 0;
   non_destructive_ = 0;
@@ -2653,8 +2518,7 @@ DiskThread::DiskThread(DiskBlockTable *block_table) {
 }
 
 DiskThread::~DiskThread() {
-  if (block_buffer_)
-    free(block_buffer_);
+  if (block_buffer_) free(block_buffer_);
 }
 
 // Set filename for device file (in /dev).
@@ -2665,19 +2529,17 @@ void DiskThread::SetDevice(const char *device_name) {
 // Set various parameters that control the behaviour of the test.
 // -1 is used as a sentinel value on each parameter (except non_destructive)
 // to indicate that the parameter not be set.
-bool DiskThread::SetParameters(int read_block_size,
-                               int write_block_size,
-                               int64 segment_size,
-                               int64 cache_size,
-                               int blocks_per_segment,
-                               int64 read_threshold,
-                               int64 write_threshold,
-                               int non_destructive) {
+bool DiskThread::SetParameters(int read_block_size, int write_block_size,
+                               int64 segment_size, int64 cache_size,
+                               int blocks_per_segment, int64 read_threshold,
+                               int64 write_threshold, int non_destructive) {
   if (read_block_size != -1) {
     // Blocks must be aligned to the disk's sector size.
     if (read_block_size % kSectorSize != 0) {
-      logprintf(0, "Process Error: Block size must be a multiple of %d "
-                "(thread %d).\n", kSectorSize, thread_num_);
+      logprintf(0,
+                "Process Error: Block size must be a multiple of %d "
+                "(thread %d).\n",
+                kSectorSize, thread_num_);
       return false;
     }
 
@@ -2688,12 +2550,15 @@ bool DiskThread::SetParameters(int read_block_size,
     // Write blocks must be aligned to the disk's sector size and to the
     // block size.
     if (write_block_size % kSectorSize != 0) {
-      logprintf(0, "Process Error: Write block size must be a multiple "
-                "of %d (thread %d).\n", kSectorSize, thread_num_);
+      logprintf(0,
+                "Process Error: Write block size must be a multiple "
+                "of %d (thread %d).\n",
+                kSectorSize, thread_num_);
       return false;
     }
     if (write_block_size % read_block_size_ != 0) {
-      logprintf(0, "Process Error: Write block size must be a multiple "
+      logprintf(0,
+                "Process Error: Write block size must be a multiple "
                 "of the read block size, which is %d (thread %d).\n",
                 read_block_size_, thread_num_);
       return false;
@@ -2704,16 +2569,18 @@ bool DiskThread::SetParameters(int read_block_size,
   } else {
     // Make sure write_block_size_ is still valid.
     if (read_block_size_ > write_block_size_) {
-      logprintf(5, "Log: Assuming write block size equal to read block size, "
-                "which is %d (thread %d).\n", read_block_size_,
-                thread_num_);
+      logprintf(5,
+                "Log: Assuming write block size equal to read block size, "
+                "which is %d (thread %d).\n",
+                read_block_size_, thread_num_);
       write_block_size_ = read_block_size_;
     } else {
       if (write_block_size_ % read_block_size_ != 0) {
-        logprintf(0, "Process Error: Write block size (defined as %d) must "
+        logprintf(0,
+                  "Process Error: Write block size (defined as %d) must "
                   "be a multiple of the read block size, which is %d "
-                  "(thread %d).\n", write_block_size_, read_block_size_,
-                  thread_num_);
+                  "(thread %d).\n",
+                  write_block_size_, read_block_size_, thread_num_);
         return false;
       }
     }
@@ -2725,8 +2592,10 @@ bool DiskThread::SetParameters(int read_block_size,
 
   if (blocks_per_segment != -1) {
     if (blocks_per_segment <= 0) {
-      logprintf(0, "Process Error: Blocks per segment must be greater than "
-                   "zero.\n (thread %d)", thread_num_);
+      logprintf(0,
+                "Process Error: Blocks per segment must be greater than "
+                "zero.\n (thread %d)",
+                thread_num_);
       return false;
     }
 
@@ -2735,8 +2604,10 @@ bool DiskThread::SetParameters(int read_block_size,
 
   if (read_threshold != -1) {
     if (read_threshold <= 0) {
-      logprintf(0, "Process Error: Read threshold must be greater than "
-                   "zero (thread %d).\n", thread_num_);
+      logprintf(0,
+                "Process Error: Read threshold must be greater than "
+                "zero (thread %d).\n",
+                thread_num_);
       return false;
     }
 
@@ -2745,8 +2616,10 @@ bool DiskThread::SetParameters(int read_block_size,
 
   if (write_threshold != -1) {
     if (write_threshold <= 0) {
-      logprintf(0, "Process Error: Write threshold must be greater than "
-                   "zero (thread %d).\n", thread_num_);
+      logprintf(0,
+                "Process Error: Write threshold must be greater than "
+                "zero (thread %d).\n",
+                thread_num_);
       return false;
     }
 
@@ -2756,8 +2629,10 @@ bool DiskThread::SetParameters(int read_block_size,
   if (segment_size != -1) {
     // Segments must be aligned to the disk's sector size.
     if (segment_size % kSectorSize != 0) {
-      logprintf(0, "Process Error: Segment size must be a multiple of %d"
-                " (thread %d).\n", kSectorSize, thread_num_);
+      logprintf(0,
+                "Process Error: Segment size must be a multiple of %d"
+                " (thread %d).\n",
+                kSectorSize, thread_num_);
       return false;
     }
 
@@ -2772,9 +2647,8 @@ bool DiskThread::SetParameters(int read_block_size,
   queue_size_ = ((cache_size_ / write_block_size_) * 3) / 2;
   // Updating DiskBlockTable parameters
   if (update_block_table_) {
-    block_table_->SetParameters(kSectorSize, write_block_size_,
-                                device_sectors_, segment_size_,
-                                device_name_);
+    block_table_->SetParameters(kSectorSize, write_block_size_, device_sectors_,
+                                segment_size_, device_name_);
   }
   return true;
 }
@@ -2832,9 +2706,10 @@ bool DiskThread::GetDiskSize(int fd) {
     device_sectors_ = device_stat.st_size / kSectorSize;
 
   } else {
-    logprintf(0, "Process Error: %s is not a regular file or block "
-              "device (thread %d).\n", device_name_.c_str(),
-              thread_num_);
+    logprintf(0,
+              "Process Error: %s is not a regular file or block "
+              "device (thread %d).\n",
+              device_name_.c_str(), thread_num_);
     return false;
   }
 
@@ -2842,9 +2717,8 @@ bool DiskThread::GetDiskSize(int fd) {
             device_sectors_, device_name_.c_str(), thread_num_);
 
   if (update_block_table_) {
-    block_table_->SetParameters(kSectorSize, write_block_size_,
-                                device_sectors_, segment_size_,
-                                device_name_);
+    block_table_->SetParameters(kSectorSize, write_block_size_, device_sectors_,
+                                segment_size_, device_name_);
   }
 
   return true;
@@ -2856,9 +2730,7 @@ bool DiskThread::CloseDevice(int fd) {
 }
 
 // Return the time in microseconds.
-int64 DiskThread::GetTime() {
-  return sat_get_time_us();
-}
+int64 DiskThread::GetTime() { return sat_get_time_us(); }
 
 // Do randomized reads and (possibly) writes on a device.
 // Return false on fatal SW error, true on SW success,
@@ -2871,8 +2743,7 @@ bool DiskThread::DoWork(int fd) {
     num_segments = 1;
   } else {
     num_segments = device_sectors_ / segment_size_;
-    if (device_sectors_ % segment_size_ != 0)
-      num_segments++;
+    if (device_sectors_ % segment_size_ != 0) num_segments++;
   }
 
   // Disk size should be at least 3x cache size.  See comment later for
@@ -2899,19 +2770,17 @@ bool DiskThread::DoWork(int fd) {
   while (IsReadyToRun()) {
     // Write blocks to disk.
     logprintf(16, "Log: Write phase %sfor disk %s (thread %d).\n",
-              non_destructive_ ? "(disabled) " : "",
-              device_name_.c_str(), thread_num_);
+              non_destructive_ ? "(disabled) " : "", device_name_.c_str(),
+              thread_num_);
     while (IsReadyToRunNoPause() &&
-           in_flight_sectors_.size() <
-               static_cast<size_t>(queue_size_ + 1)) {
+           in_flight_sectors_.size() < static_cast<size_t>(queue_size_ + 1)) {
       // Confine testing to a particular segment of the disk.
       int64 segment = (block_num / blocks_per_segment_) % num_segments;
-      if (!non_destructive_ &&
-          (block_num % blocks_per_segment_ == 0)) {
-        logprintf(20, "Log: Starting to write segment %lld out of "
+      if (!non_destructive_ && (block_num % blocks_per_segment_ == 0)) {
+        logprintf(20,
+                  "Log: Starting to write segment %lld out of "
                   "%lld on disk %s (thread %d).\n",
-                  segment, num_segments, device_name_.c_str(),
-                  thread_num_);
+                  segment, num_segments, device_name_.c_str(), thread_num_);
       }
       block_num++;
 
@@ -2958,8 +2827,7 @@ bool DiskThread::DoWork(int fd) {
     while (IsReadyToRunNoPause() && !in_flight_sectors_.empty()) {
       BlockData *block = in_flight_sectors_.front();
       in_flight_sectors_.pop();
-      if (!ValidateBlockOnDisk(fd, block))
-        return true;
+      if (!ValidateBlockOnDisk(fd, block)) return true;
       block_table_->RemoveBlock(block);
       blocks_read_++;
     }
@@ -2972,7 +2840,7 @@ bool DiskThread::DoWork(int fd) {
 // Do an asynchronous disk I/O operation.
 // Return false if the IO is not set up.
 bool DiskThread::AsyncDiskIO(IoOp op, int fd, void *buf, int64 size,
-                            int64 offset, int64 timeout) {
+                             int64 offset, int64 timeout) {
 #ifdef HAVE_LIBAIO_H
   // Use the Linux native asynchronous I/O interface for reading/writing.
   // A read/write consists of three basic steps:
@@ -2984,10 +2852,8 @@ bool DiskThread::AsyncDiskIO(IoOp op, int fd, void *buf, int64 size,
     const int opcode;
     const char *op_str;
     const char *error_str;
-  } operations[2] = {
-    { IO_CMD_PREAD, "read", "disk-read-error" },
-    { IO_CMD_PWRITE, "write", "disk-write-error" }
-  };
+  } operations[2] = {{IO_CMD_PREAD, "read", "disk-read-error"},
+                     {IO_CMD_PWRITE, "write", "disk-write-error"}};
 
   struct iocb cb;
   memset(&cb, 0, sizeof(cb));
@@ -2998,15 +2864,16 @@ bool DiskThread::AsyncDiskIO(IoOp op, int fd, void *buf, int64 size,
   cb.u.c.nbytes = size;
   cb.u.c.offset = offset;
 
-  struct iocb *cbs[] = { &cb };
+  struct iocb *cbs[] = {&cb};
   if (io_submit(aio_ctx_, 1, cbs) != 1) {
     int error = errno;
     char buf[256];
     sat_strerror(error, buf, sizeof(buf));
-    logprintf(0, "Process Error: Unable to submit async %s "
-                 "on disk %s (thread %d). Error %d, %s\n",
-              operations[op].op_str, device_name_.c_str(),
-              thread_num_, error, buf);
+    logprintf(0,
+              "Process Error: Unable to submit async %s "
+              "on disk %s (thread %d). Error %d, %s\n",
+              operations[op].op_str, device_name_.c_str(), thread_num_, error,
+              buf);
     return false;
   }
 
@@ -3022,13 +2889,13 @@ bool DiskThread::AsyncDiskIO(IoOp op, int fd, void *buf, int64 size,
     int error = errno;
     if (error == EINTR) {
       logprintf(5, "Log: %s interrupted on disk %s (thread %d).\n",
-                operations[op].op_str, device_name_.c_str(),
-                thread_num_);
+                operations[op].op_str, device_name_.c_str(), thread_num_);
     } else {
       os_->ErrorReport(device_name_.c_str(), operations[op].error_str, 1);
       errorcount_ += 1;
-      logprintf(0, "Hardware Error: Timeout doing async %s to sectors "
-                   "starting at %lld on disk %s (thread %d).\n",
+      logprintf(0,
+                "Hardware Error: Timeout doing async %s to sectors "
+                "starting at %lld on disk %s (thread %d).\n",
                 operations[op].op_str, offset / kSectorSize,
                 device_name_.c_str(), thread_num_);
     }
@@ -3044,7 +2911,8 @@ bool DiskThread::AsyncDiskIO(IoOp op, int fd, void *buf, int64 size,
       int error = errno;
       char buf[256];
       sat_strerror(error, buf, sizeof(buf));
-      logprintf(0, "Process Error: Unable to create aio context on disk %s"
+      logprintf(0,
+                "Process Error: Unable to create aio context on disk %s"
                 " (thread %d) Error %d, %s\n",
                 device_name_.c_str(), thread_num_, error, buf);
     }
@@ -3062,20 +2930,23 @@ bool DiskThread::AsyncDiskIO(IoOp op, int fd, void *buf, int64 size,
     if (result < 0) {
       switch (result) {
         case -EIO:
-          logprintf(0, "Hardware Error: Low-level I/O error while doing %s to "
-                       "sectors starting at %lld on disk %s (thread %d).\n",
+          logprintf(0,
+                    "Hardware Error: Low-level I/O error while doing %s to "
+                    "sectors starting at %lld on disk %s (thread %d).\n",
                     operations[op].op_str, offset / kSectorSize,
                     device_name_.c_str(), thread_num_);
           break;
         default:
-          logprintf(0, "Hardware Error: Unknown error while doing %s to "
-                       "sectors starting at %lld on disk %s (thread %d).\n",
+          logprintf(0,
+                    "Hardware Error: Unknown error while doing %s to "
+                    "sectors starting at %lld on disk %s (thread %d).\n",
                     operations[op].op_str, offset / kSectorSize,
                     device_name_.c_str(), thread_num_);
       }
     } else {
-      logprintf(0, "Hardware Error: Unable to %s to sectors starting at "
-                   "%lld on disk %s (thread %d).\n",
+      logprintf(0,
+                "Hardware Error: Unable to %s to sectors starting at "
+                "%lld on disk %s (thread %d).\n",
                 operations[op].op_str, offset / kSectorSize,
                 device_name_.c_str(), thread_num_);
     }
@@ -3101,11 +2972,12 @@ bool DiskThread::WriteBlockToDisk(int fd, BlockData *block) {
     unsigned int *memblock = static_cast<unsigned int *>(block_buffer_);
     block->set_pattern(patternlist_->GetRandomPattern());
 
-    logprintf(11, "Log: Warning, using pattern fill fallback in "
-                  "DiskThread::WriteBlockToDisk on disk %s (thread %d).\n",
+    logprintf(11,
+              "Log: Warning, using pattern fill fallback in "
+              "DiskThread::WriteBlockToDisk on disk %s (thread %d).\n",
               device_name_.c_str(), thread_num_);
 
-    for (unsigned int i = 0; i < block->size()/wordsize_; i++) {
+    for (unsigned int i = 0; i < block->size() / wordsize_; i++) {
       memblock[i] = block->pattern()->pattern(i);
     }
   } else {
@@ -3114,10 +2986,11 @@ bool DiskThread::WriteBlockToDisk(int fd, BlockData *block) {
     sat_->PutValid(&pe);
   }
 
-  logprintf(12, "Log: Writing %lld sectors starting at %lld on disk %s"
+  logprintf(12,
+            "Log: Writing %lld sectors starting at %lld on disk %s"
             " (thread %d).\n",
-            block->size()/kSectorSize, block->address(),
-            device_name_.c_str(), thread_num_);
+            block->size() / kSectorSize, block->address(), device_name_.c_str(),
+            thread_num_);
 
   int64 start_time = GetTime();
 
@@ -3130,8 +3003,9 @@ bool DiskThread::WriteBlockToDisk(int fd, BlockData *block) {
   logprintf(12, "Log: Writing time: %lld us (thread %d).\n",
             end_time - start_time, thread_num_);
   if (end_time - start_time > write_threshold_) {
-    logprintf(5, "Log: Write took %lld us which is longer than threshold "
-                 "%lld us on disk %s (thread %d).\n",
+    logprintf(5,
+              "Log: Write took %lld us which is longer than threshold "
+              "%lld us on disk %s (thread %d).\n",
               end_time - start_time, write_threshold_, device_name_.c_str(),
               thread_num_);
   }
@@ -3149,16 +3023,19 @@ bool DiskThread::ValidateBlockOnDisk(int fd, BlockData *block) {
   int64 current_bytes;
   uint64 address = block->address();
 
-  logprintf(20, "Log: Reading sectors starting at %lld on disk %s "
+  logprintf(20,
+            "Log: Reading sectors starting at %lld on disk %s "
             "(thread %d).\n",
             address, device_name_.c_str(), thread_num_);
 
   // Read block from disk and time the read.  If it takes longer than the
   // threshold, complain.
   if (lseek(fd, address * kSectorSize, SEEK_SET) == -1) {
-    logprintf(0, "Process Error: Unable to seek to sector %lld in "
+    logprintf(0,
+              "Process Error: Unable to seek to sector %lld in "
               "DiskThread::ValidateSectorsOnDisk on disk %s "
-              "(thread %d).\n", address, device_name_.c_str(), thread_num_);
+              "(thread %d).\n",
+              address, device_name_.c_str(), thread_num_);
     return false;
   }
   int64 start_time = GetTime();
@@ -3174,15 +3051,15 @@ bool DiskThread::ValidateBlockOnDisk(int fd, BlockData *block) {
 
     memset(block_buffer_, 0, current_bytes);
 
-    logprintf(20, "Log: Reading %lld sectors starting at sector %lld on "
+    logprintf(20,
+              "Log: Reading %lld sectors starting at sector %lld on "
               "disk %s (thread %d)\n",
               current_bytes / kSectorSize,
               (address * kSectorSize + bytes_read) / kSectorSize,
               device_name_.c_str(), thread_num_);
 
     if (!AsyncDiskIO(ASYNC_IO_READ, fd, block_buffer_, current_bytes,
-                     address * kSectorSize + bytes_read,
-                     write_timeout_)) {
+                     address * kSectorSize + bytes_read, write_timeout_)) {
       return false;
     }
 
@@ -3190,20 +3067,22 @@ bool DiskThread::ValidateBlockOnDisk(int fd, BlockData *block) {
     logprintf(20, "Log: Reading time: %lld us (thread %d).\n",
               end_time - start_time, thread_num_);
     if (end_time - start_time > read_threshold_) {
-      logprintf(5, "Log: Read took %lld us which is longer than threshold "
+      logprintf(5,
+                "Log: Read took %lld us which is longer than threshold "
                 "%lld us on disk %s (thread %d).\n",
-                end_time - start_time, read_threshold_,
-                device_name_.c_str(), thread_num_);
+                end_time - start_time, read_threshold_, device_name_.c_str(),
+                thread_num_);
     }
 
     // In non-destructive mode, don't compare the block to the pattern since
     // the block was never written to disk in the first place.
     if (!non_destructive_) {
-      if (CheckRegion(block_buffer_, block->pattern(), 0, current_bytes,
-                      0, bytes_read)) {
+      if (CheckRegion(block_buffer_, block->pattern(), 0, current_bytes, 0,
+                      bytes_read)) {
         os_->ErrorReport(device_name_.c_str(), "disk-pattern-error", 1);
         errorcount_ += 1;
-        logprintf(0, "Hardware Error: Pattern mismatch in block starting at "
+        logprintf(0,
+                  "Hardware Error: Pattern mismatch in block starting at "
                   "sector %lld in DiskThread::ValidateSectorsOnDisk on "
                   "disk %s (thread %d).\n",
                   address, device_name_.c_str(), thread_num_);
@@ -3222,8 +3101,8 @@ bool DiskThread::ValidateBlockOnDisk(int fd, BlockData *block) {
 bool DiskThread::Work() {
   int fd;
 
-  logprintf(9, "Log: Starting disk thread %d, disk %s\n",
-            thread_num_, device_name_.c_str());
+  logprintf(9, "Log: Starting disk thread %d, disk %s\n", thread_num_,
+            device_name_.c_str());
 
   srandom(time(NULL));
 
@@ -3235,16 +3114,17 @@ bool DiskThread::Work() {
   // Allocate a block buffer aligned to 512 bytes since the kernel requires it
   // when using direct IO.
 #ifdef HAVE_POSIX_MEMALIGN
-  int memalign_result = posix_memalign(&block_buffer_, kBufferAlignment,
-                                       sat_->page_length());
+  int memalign_result =
+      posix_memalign(&block_buffer_, kBufferAlignment, sat_->page_length());
 #else
   block_buffer_ = memalign(kBufferAlignment, sat_->page_length());
   int memalign_result = (block_buffer_ == 0);
 #endif
   if (memalign_result) {
     CloseDevice(fd);
-    logprintf(0, "Process Error: Unable to allocate memory for buffers "
-                 "for disk %s (thread %d) posix memalign returned %d.\n",
+    logprintf(0,
+              "Process Error: Unable to allocate memory for buffers "
+              "for disk %s (thread %d) posix memalign returned %d.\n",
               device_name_.c_str(), thread_num_, memalign_result);
     status_ = false;
     return false;
@@ -3253,7 +3133,8 @@ bool DiskThread::Work() {
 #ifdef HAVE_LIBAIO_H
   if (io_setup(5, &aio_ctx_)) {
     CloseDevice(fd);
-    logprintf(0, "Process Error: Unable to create aio context for disk %s"
+    logprintf(0,
+              "Process Error: Unable to create aio context for disk %s"
               " (thread %d).\n",
               device_name_.c_str(), thread_num_);
     status_ = false;
@@ -3270,8 +3151,9 @@ bool DiskThread::Work() {
 #endif
   CloseDevice(fd);
 
-  logprintf(9, "Log: Completed %d (disk %s): disk thread status %d, "
-               "%d pages copied\n",
+  logprintf(9,
+            "Log: Completed %d (disk %s): disk thread status %d, "
+            "%d pages copied\n",
             thread_num_, device_name_.c_str(), status_, pages_copied_);
   return result;
 }
@@ -3281,8 +3163,7 @@ RandomDiskThread::RandomDiskThread(DiskBlockTable *block_table)
   update_block_table_ = 0;
 }
 
-RandomDiskThread::~RandomDiskThread() {
-}
+RandomDiskThread::~RandomDiskThread() {}
 
 // Workload for random disk thread.
 bool RandomDiskThread::DoWork(int fd) {
@@ -3309,8 +3190,7 @@ MemoryRegionThread::MemoryRegionThread() {
 }
 
 MemoryRegionThread::~MemoryRegionThread() {
-  if (pages_ != NULL)
-    delete pages_;
+  if (pages_ != NULL) delete pages_;
 }
 
 // Set a region of memory or MMIO to be tested.
@@ -3319,19 +3199,19 @@ bool MemoryRegionThread::SetRegion(void *region, int64 size) {
   int plength = sat_->page_length();
   int npages = size / plength;
   if (size % plength) {
-    logprintf(0, "Process Error: region size is not a multiple of SAT "
+    logprintf(0,
+              "Process Error: region size is not a multiple of SAT "
               "page length\n");
     return false;
   } else {
-    if (pages_ != NULL)
-      delete pages_;
+    if (pages_ != NULL) delete pages_;
     pages_ = new PageEntryQueue(npages);
-    char *base_addr = reinterpret_cast<char*>(region);
+    char *base_addr = reinterpret_cast<char *>(region);
     region_ = base_addr;
     for (int i = 0; i < npages; i++) {
       struct page_entry pe;
       init_pe(&pe);
-      pe.addr = reinterpret_cast<void*>(base_addr + i * plength);
+      pe.addr = reinterpret_cast<void *>(base_addr + i * plength);
       pe.offset = i * plength;
 
       pages_->Push(&pe);
@@ -3342,8 +3222,7 @@ bool MemoryRegionThread::SetRegion(void *region, int64 size) {
 
 // More detailed error printout for hardware errors in memory or MMIO
 // regions.
-void MemoryRegionThread::ProcessError(struct ErrorRecord *error,
-                                      int priority,
+void MemoryRegionThread::ProcessError(struct ErrorRecord *error, int priority,
                                       const char *message) {
   uint32 buffer_offset;
   if (phase_ == kPhaseCopy) {
@@ -3359,16 +3238,15 @@ void MemoryRegionThread::ProcessError(struct ErrorRecord *error,
     // Determine if this is a write or read error.
     os_->Flush(error->vaddr);
     error->reread = *(error->vaddr);
-    char *good = reinterpret_cast<char*>(&(error->expected));
-    char *bad = reinterpret_cast<char*>(&(error->actual));
+    char *good = reinterpret_cast<char *>(&(error->expected));
+    char *bad = reinterpret_cast<char *>(&(error->actual));
     sat_assert(error->expected != error->actual);
     unsigned int offset = 0;
     for (offset = 0; offset < (sizeof(error->expected) - 1); offset++) {
-      if (good[offset] != bad[offset])
-        break;
+      if (good[offset] != bad[offset]) break;
     }
 
-    error->vbyteaddr = reinterpret_cast<char*>(error->vaddr) + offset;
+    error->vbyteaddr = reinterpret_cast<char *>(error->vaddr) + offset;
 
     buffer_offset = error->vbyteaddr - region_;
 
@@ -3378,16 +3256,11 @@ void MemoryRegionThread::ProcessError(struct ErrorRecord *error,
               "%s: miscompare on %s, CRC check at %p(0x%llx), "
               "offset %llx: read:0x%016llx, reread:0x%016llx "
               "expected:0x%016llx\n",
-              message,
-              identifier_.c_str(),
-              error->vaddr,
-              error->paddr,
-              buffer_offset,
-              error->actual,
-              error->reread,
-              error->expected);
+              message, identifier_.c_str(), error->vaddr, error->paddr,
+              buffer_offset, error->actual, error->reread, error->expected);
   } else {
-    logprintf(0, "Process Error: memory region thread raised an "
+    logprintf(0,
+              "Process Error: memory region thread raised an "
               "unexpected error.");
   }
 }
@@ -3413,21 +3286,23 @@ bool MemoryRegionThread::Work() {
     phase_ = kPhaseNoPhase;
     result = result && sat_->GetValid(&source_pe);
     if (!result) {
-      logprintf(0, "Process Error: memory region thread failed to pop "
+      logprintf(0,
+                "Process Error: memory region thread failed to pop "
                 "pages from SAT, bailing\n");
       break;
     }
 
     result = result && pages_->PopRandom(&memregion_pe);
     if (!result) {
-      logprintf(0, "Process Error: memory region thread failed to pop "
+      logprintf(0,
+                "Process Error: memory region thread failed to pop "
                 "pages from queue, bailing\n");
       break;
     }
 
     // Error injection for CRC copy.
     if ((sat_->error_injection() || error_injection_) && loops == 1) {
-      addr = reinterpret_cast<int64*>(source_pe.addr);
+      addr = reinterpret_cast<int64 *>(source_pe.addr);
       offset = random() % (sat_->page_length() / wordsize_);
       data = addr[offset];
       addr[offset] = error_constant;
@@ -3441,7 +3316,7 @@ bool MemoryRegionThread::Work() {
 
     // Error injection for CRC Check.
     if ((sat_->error_injection() || error_injection_) && loops == 2) {
-      addr = reinterpret_cast<int64*>(memregion_pe.addr);
+      addr = reinterpret_cast<int64 *>(memregion_pe.addr);
       offset = random() % (sat_->page_length() / wordsize_);
       data = addr[offset];
       addr[offset] = error_constant;
@@ -3455,19 +3330,21 @@ bool MemoryRegionThread::Work() {
     // Storing pages on their proper queues.
     result = result && sat_->PutValid(&source_pe);
     if (!result) {
-      logprintf(0, "Process Error: memory region thread failed to push "
+      logprintf(0,
+                "Process Error: memory region thread failed to push "
                 "pages into SAT, bailing\n");
       break;
     }
     result = result && pages_->Push(&memregion_pe);
     if (!result) {
-      logprintf(0, "Process Error: memory region thread failed to push "
+      logprintf(0,
+                "Process Error: memory region thread failed to push "
                 "pages into queue, bailing\n");
       break;
     }
 
-    if ((sat_->error_injection() || error_injection_) &&
-        loops >= 1 && loops <= 2) {
+    if ((sat_->error_injection() || error_injection_) && loops >= 1 &&
+        loops <= 2) {
       addr[offset] = data;
     }
 
@@ -3477,34 +3354,33 @@ bool MemoryRegionThread::Work() {
 
   pages_copied_ = loops;
   status_ = result;
-  logprintf(9, "Log: Completed %d: Memory Region thread. Status %d, %d "
-            "pages checked\n", thread_num_, status_, pages_copied_);
+  logprintf(9,
+            "Log: Completed %d: Memory Region thread. Status %d, %d "
+            "pages checked\n",
+            thread_num_, status_, pages_copied_);
   return result;
 }
 
 // The list of MSRs to read from each cpu.
 const CpuFreqThread::CpuRegisterType CpuFreqThread::kCpuRegisters[] = {
-  { kMsrTscAddr, "TSC" },
-  { kMsrAperfAddr, "APERF" },
-  { kMsrMperfAddr, "MPERF" },
+    {kMsrTscAddr, "TSC"},
+    {kMsrAperfAddr, "APERF"},
+    {kMsrMperfAddr, "MPERF"},
 };
 
 CpuFreqThread::CpuFreqThread(int num_cpus, int freq_threshold, int round)
-  : num_cpus_(num_cpus),
-    freq_threshold_(freq_threshold),
-    round_(round) {
+    : num_cpus_(num_cpus), freq_threshold_(freq_threshold), round_(round) {
   sat_assert(round >= 0);
   if (round == 0) {
     // If rounding is off, force rounding to the nearest MHz.
     round_ = 1;
     round_value_ = 0.5;
   } else {
-    round_value_ = round/2.0;
+    round_value_ = round / 2.0;
   }
 }
 
-CpuFreqThread::~CpuFreqThread() {
-}
+CpuFreqThread::~CpuFreqThread() {}
 
 // Compute the difference between the currently read MSR values and the
 // previously read values and store the results in delta. If any of the
@@ -3515,9 +3391,10 @@ bool CpuFreqThread::ComputeDelta(CpuDataType *current, CpuDataType *previous,
   // Loop through the msrs.
   for (int msr = 0; msr < kMsrLast; msr++) {
     if (previous->msrs[msr] > current->msrs[msr]) {
-      logprintf(0, "Log: Register %s went backwards 0x%llx to 0x%llx "
-                "skipping interval\n", kCpuRegisters[msr], previous->msrs[msr],
-                current->msrs[msr]);
+      logprintf(0,
+                "Log: Register %s went backwards 0x%llx to 0x%llx "
+                "skipping interval\n",
+                kCpuRegisters[msr], previous->msrs[msr], current->msrs[msr]);
       return false;
     } else {
       delta->msrs[msr] = current->msrs[msr] - previous->msrs[msr];
@@ -3545,8 +3422,8 @@ bool CpuFreqThread::ComputeFrequency(CpuDataType *current,
   }
 
   double interval = delta.tv.tv_sec + delta.tv.tv_usec / 1000000.0;
-  double frequency = 1.0 * delta.msrs[kMsrTsc] / 1000000
-                     * delta.msrs[kMsrAperf] / delta.msrs[kMsrMperf] / interval;
+  double frequency = 1.0 * delta.msrs[kMsrTsc] / 1000000 *
+                     delta.msrs[kMsrAperf] / delta.msrs[kMsrMperf] / interval;
 
   // Use the rounding value to round up properly.
   int computed = static_cast<int>(frequency + round_value_);
@@ -3610,8 +3487,7 @@ bool CpuFreqThread::Work() {
       for (int cpu = 0; cpu < num_cpus_; cpu++) {
         if (CPU_ISSET(cpu, &cpuset)) {
           int freq;
-          if (!ComputeFrequency(&data[curr][cpu], &data[prev][cpu],
-                                &freq)) {
+          if (!ComputeFrequency(&data[curr][cpu], &data[prev][cpu], &freq)) {
             // Reset the number of collected intervals since an unknown
             // error occurred.
             logprintf(0, "Log: Cannot get frequency of cpu %d.\n", cpu);
@@ -3622,8 +3498,10 @@ bool CpuFreqThread::Work() {
           if (freq < freq_threshold_) {
             errorcount_++;
             pass = false;
-            logprintf(0, "Log: Cpu %d frequency is too low, frequency %d MHz "
-                      "threshold %d MHz.\n", cpu, freq, freq_threshold_);
+            logprintf(0,
+                      "Log: Cpu %d frequency is too low, frequency %d MHz "
+                      "threshold %d MHz.\n",
+                      cpu, freq, freq_threshold_);
           }
         }
       }
@@ -3638,7 +3516,6 @@ bool CpuFreqThread::Work() {
 
   return pass;
 }
-
 
 // Get the MSR values for this particular cpu and save them in data. If
 // any error is encountered, returns false. Otherwise, returns true.
@@ -3697,8 +3574,9 @@ bool CpuFreqThread::CanRun() {
   }
   return true;
 #else
-  logprintf(0, "Process Error: "
-               "cpu_freq_test is only supported on X86 processors.\n");
+  logprintf(0,
+            "Process Error: "
+            "cpu_freq_test is only supported on X86 processors.\n");
   return false;
 #endif
 }

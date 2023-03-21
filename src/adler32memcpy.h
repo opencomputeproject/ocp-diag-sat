@@ -16,6 +16,7 @@
 #define STRESSAPPTEST_ADLER32MEMCPY_H_
 
 #include <string>
+
 #include "sattypes.h"
 
 // Encapsulation for Adler checksum. Please see adler32memcpy.cc for more
@@ -44,7 +45,7 @@ bool CalculateAdlerChecksum(uint64 *data64, unsigned int size_in_bytes,
 
 // C implementation of Adler memory copy.
 bool AdlerMemcpyC(uint64 *dstmem64, uint64 *srcmem64,
-                    unsigned int size_in_bytes, AdlerChecksum *checksum);
+                  unsigned int size_in_bytes, AdlerChecksum *checksum);
 
 // C implementation of Adler memory copy with some float point ops,
 // attempting to warm up the CPU.
@@ -54,6 +55,5 @@ bool AdlerMemcpyWarmC(uint64 *dstmem64, uint64 *srcmem64,
 // x86_64 SSE2 assembly implementation of fast and stressful Adler memory copy.
 bool AdlerMemcpyAsm(uint64 *dstmem64, uint64 *srcmem64,
                     unsigned int size_in_bytes, AdlerChecksum *checksum);
-
 
 #endif  // STRESSAPPTEST_ADLER32MEMCPY_H_

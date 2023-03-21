@@ -17,20 +17,20 @@
 #define STRESSAPPTEST_OS_H_
 
 #include <dirent.h>
-#include <unistd.h>
-#include <sys/syscall.h>
 #include <stdint.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
-#include <string>
 #include <list>
 #include <map>
+#include <string>
 #include <vector>
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
 #include "adler32memcpy.h"  // NOLINT
-#include "sattypes.h"       // NOLINT
 #include "clock.h"          // NOLINT
+#include "sattypes.h"       // NOLINT
 
 #if defined(STRESSAPPTEST_CPU_X86_64) || defined(STRESSAPPTEST_CPU_I686)
 #include <immintrin.h>
@@ -52,7 +52,7 @@ struct PCIDevice {
   uint64 size[6];
 };
 
-typedef vector<PCIDevice*> PCIDevices;
+typedef vector<PCIDevice *> PCIDevices;
 
 class ErrorDiag;
 
@@ -73,13 +73,11 @@ class OsLayer {
   // Set the minium amount of memory that should not be allocated. This only
   // has any affect if hugepages are not used.
   // Must be set before Initialize().
-  void SetReserveSize(int64 reserve_mb) {
-    reserve_mb_ = reserve_mb;
-  }
+  void SetReserveSize(int64 reserve_mb) { reserve_mb_ = reserve_mb; }
 
   // Set parameters needed to translate physical address to memory module.
   void SetDramMappingParams(uintptr_t channel_hash, int channel_width,
-                            vector< vector<string> > *channels) {
+                            vector<vector<string> > *channels) {
     channel_hash_ = channel_hash;
     channel_width_ = channel_width;
     channels_ = channels;
@@ -147,7 +145,7 @@ class OsLayer {
   // any runtime machine configuration info.
   inline static void FastFlush(void *vaddr) {
 #ifdef STRESSAPPTEST_CPU_PPC
-    asm volatile("dcbf 0,%0; sync" : : "r" (vaddr));
+    asm volatile("dcbf 0,%0; sync" : : "r"(vaddr));
 #elif defined(STRESSAPPTEST_CPU_X86_64) || defined(STRESSAPPTEST_CPU_I686)
     // Put mfence before and after clflush to make sure:
     // 1. The write before the clflush is committed to memory bus;
@@ -165,15 +163,16 @@ class OsLayer {
     syscall(__NR_cacheflush, vaddr, 32, 0);
 #elif defined(STRESSAPPTEST_CPU_ARMV7A)
     // ARMv7a cachelines are 8 words (32 bytes).
-    syscall(__ARM_NR_cacheflush, vaddr, reinterpret_cast<char*>(vaddr) + 32, 0);
+    syscall(__ARM_NR_cacheflush, vaddr, reinterpret_cast<char *>(vaddr) + 32,
+            0);
 #elif defined(STRESSAPPTEST_CPU_AARCH64)
-    asm volatile("dc cvau, %0" : : "r" (vaddr));
+    asm volatile("dc cvau, %0" : : "r"(vaddr));
     asm volatile("dsb ish");
-    asm volatile("ic ivau, %0" : : "r" (vaddr));
+    asm volatile("ic ivau, %0" : : "r"(vaddr));
     asm volatile("dsb ish");
     asm volatile("isb");
 #else
-  #warning "Unsupported CPU type: Unable to force cache flushes."
+#warning "Unsupported CPU type: Unable to force cache flushes."
 #endif
   }
 
@@ -184,7 +183,7 @@ class OsLayer {
   inline static void FastFlushList(void **vaddrs) {
 #ifdef STRESSAPPTEST_CPU_PPC
     while (*vaddrs) {
-      asm volatile("dcbf 0,%0" : : "r" (*vaddrs++));
+      asm volatile("dcbf 0,%0" : : "r"(*vaddrs++));
     }
     asm volatile("sync");
 #elif defined(STRESSAPPTEST_CPU_X86_64) || defined(STRESSAPPTEST_CPU_I686)
@@ -202,12 +201,13 @@ class OsLayer {
       _mm_clflush(*vaddrs++);
     }
     _mm_mfence();
-#elif defined(STRESSAPPTEST_CPU_MIPS) || defined(STRESSAPPTEST_CPU_ARMV7A) || defined(STRESSAPPTEST_CPU_AARCH64)
+#elif defined(STRESSAPPTEST_CPU_MIPS) || defined(STRESSAPPTEST_CPU_ARMV7A) || \
+    defined(STRESSAPPTEST_CPU_AARCH64)
     while (*vaddrs) {
       FastFlush(*vaddrs++);
     }
 #else
-    #warning "Unsupported CPU type: Unable to force cache flushes."
+#warning "Unsupported CPU type: Unable to force cache flushes."
 #endif
   }
 
@@ -219,7 +219,7 @@ class OsLayer {
   // parallel march algorithms.
   inline static void FastFlushHint(void *vaddr) {
 #ifdef STRESSAPPTEST_CPU_PPC
-    asm volatile("dcbf 0,%0" : : "r" (vaddr));
+    asm volatile("dcbf 0,%0" : : "r"(vaddr));
 #elif defined(STRESSAPPTEST_CPU_X86_64) || defined(STRESSAPPTEST_CPU_I686)
     // From Intel manual:
     // CLFLUSH is only ordered by the MFENCE instruction. It is not guaranteed
@@ -227,10 +227,11 @@ class OsLayer {
     // instruction. For example, software can use an MFENCE instruction to
     // insure that previous stores are included in the write-back.
     _mm_clflush(vaddr);
-#elif defined(STRESSAPPTEST_CPU_MIPS) || defined(STRESSAPPTEST_CPU_ARMV7A) || defined(STRESSAPPTEST_CPU_AARCH64)
+#elif defined(STRESSAPPTEST_CPU_MIPS) || defined(STRESSAPPTEST_CPU_ARMV7A) || \
+    defined(STRESSAPPTEST_CPU_AARCH64)
     FastFlush(vaddr);
 #else
-    #warning "Unsupported CPU type: Unable to force cache flushes."
+#warning "Unsupported CPU type: Unable to force cache flushes."
 #endif
   }
 
@@ -252,11 +253,12 @@ class OsLayer {
     // instruction. For example, software can use an MFENCE instruction to
     // insure that previous stores are included in the write-back.
     _mm_mfence();
-#elif defined(STRESSAPPTEST_CPU_MIPS) || defined(STRESSAPPTEST_CPU_ARMV7A) || defined(STRESSAPPTEST_CPU_AARCH64)
+#elif defined(STRESSAPPTEST_CPU_MIPS) || defined(STRESSAPPTEST_CPU_ARMV7A) || \
+    defined(STRESSAPPTEST_CPU_AARCH64)
     // This is a NOP, FastFlushHint() always does a full flush, so there's
     // nothing to do for FastFlushSync().
 #else
-  #warning "Unsupported CPU type: Unable to force cache flushes."
+#warning "Unsupported CPU type: Unable to force cache flushes."
 #endif
   }
 
@@ -267,28 +269,28 @@ class OsLayer {
 #ifdef STRESSAPPTEST_CPU_PPC
     uint32 tbl, tbu, temp;
     __asm __volatile(
-      "1:\n"
-      "mftbu  %2\n"
-      "mftb   %0\n"
-      "mftbu  %1\n"
-      "cmpw   %2,%1\n"
-      "bne    1b\n"
-      : "=r"(tbl), "=r"(tbu), "=r"(temp)
-      :
-      : "cc");
+        "1:\n"
+        "mftbu  %2\n"
+        "mftb   %0\n"
+        "mftbu  %1\n"
+        "cmpw   %2,%1\n"
+        "bne    1b\n"
+        : "=r"(tbl), "=r"(tbu), "=r"(temp)
+        :
+        : "cc");
 
     tsc = (static_cast<uint64>(tbu) << 32) | static_cast<uint64>(tbl);
 #elif defined(STRESSAPPTEST_CPU_X86_64) || defined(STRESSAPPTEST_CPU_I686)
     tsc = __rdtsc();
 #elif defined(STRESSAPPTEST_CPU_MIPS)
-    __asm __volatile("rdhwr  %0, $2\n" : "=r" (tsc));
+    __asm __volatile("rdhwr  %0, $2\n" : "=r"(tsc));
 #elif defined(STRESSAPPTEST_CPU_ARMV7A)
-    #warning "Unsupported CPU type ARMV7A: your timer may not function correctly"
+#warning "Unsupported CPU type ARMV7A: your timer may not function correctly"
     tsc = 0;
 #elif defined(STRESSAPPTEST_CPU_AARCH64)
-    __asm __volatile("mrs %0, CNTVCT_EL0" : "=r" (tsc) : : );
+    __asm __volatile("mrs %0, CNTVCT_EL0" : "=r"(tsc) : :);
 #else
-    #warning "Unsupported CPU type: your timer may not function correctly"
+#warning "Unsupported CPU type: your timer may not function correctly"
     tsc = 0;
 #endif
     return (tsc);
@@ -362,8 +364,7 @@ class OsLayer {
   // This call back is called with a physical address, and the app can fill in
   // the most recent transaction that occurred at that address.
   typedef bool (*ErrCallback)(uint64 paddr, string *buf);
-  void set_err_log_callback(
-    ErrCallback err_log_callback) {
+  void set_err_log_callback(ErrCallback err_log_callback) {
     err_log_callback_ = err_log_callback;
   }
   ErrCallback get_err_log_callback() { return err_log_callback_; }
@@ -378,34 +379,33 @@ class OsLayer {
   }
 
  protected:
-  void *testmem_;                // Location of test memory.
-  uint64 testmemsize_;           // Size of test memory.
-  int64 totalmemsize_;           // Size of available memory.
-  int64 min_hugepages_bytes_;    // Minimum hugepages size.
-  int64 reserve_mb_;             // Minimum amount of memory to reserve in MB.
-  bool  error_injection_;        // Do error injection?
-  bool  normal_mem_;             // Memory DMA capable?
-  bool  use_hugepages_;          // Use hugepage shmem?
-  bool  use_posix_shm_;          // Use 4k page shmem?
-  bool  dynamic_mapped_shmem_;   // Conserve virtual address space.
-  bool  mmapped_allocation_;     // Was memory allocated using mmap()?
-  int   shmid_;                  // Handle to shmem
-  vector< vector<string> > *channels_;  // Memory module names per channel.
-  uint64 channel_hash_;          // Mask of address bits XORed for channel.
-  int channel_width_;            // Channel width in bits.
+  void *testmem_;              // Location of test memory.
+  uint64 testmemsize_;         // Size of test memory.
+  int64 totalmemsize_;         // Size of available memory.
+  int64 min_hugepages_bytes_;  // Minimum hugepages size.
+  int64 reserve_mb_;           // Minimum amount of memory to reserve in MB.
+  bool error_injection_;       // Do error injection?
+  bool normal_mem_;            // Memory DMA capable?
+  bool use_hugepages_;         // Use hugepage shmem?
+  bool use_posix_shm_;         // Use 4k page shmem?
+  bool dynamic_mapped_shmem_;  // Conserve virtual address space.
+  bool mmapped_allocation_;    // Was memory allocated using mmap()?
+  int shmid_;                  // Handle to shmem
+  vector<vector<string> > *channels_;  // Memory module names per channel.
+  uint64 channel_hash_;  // Mask of address bits XORed for channel.
+  int channel_width_;    // Channel width in bits.
 
-  int64 regionsize_;             // Size of memory "regions"
-  int   regioncount_;            // Number of memory "regions"
-  int   num_cpus_;               // Number of cpus in the system.
-  int   num_nodes_;              // Number of nodes in the system.
-  int   num_cpus_per_node_;      // Number of cpus per node in the system.
-  int   address_mode_;           // Are we running 32 or 64 bit?
-  bool  has_vector_;             // Do we have sse2/neon instructions?
-  bool  has_clflush_;            // Do we have clflush instructions?
-  bool  use_flush_page_cache_;   // Do we need to flush the page cache?
+  int64 regionsize_;           // Size of memory "regions"
+  int regioncount_;            // Number of memory "regions"
+  int num_cpus_;               // Number of cpus in the system.
+  int num_nodes_;              // Number of nodes in the system.
+  int num_cpus_per_node_;      // Number of cpus per node in the system.
+  int address_mode_;           // Are we running 32 or 64 bit?
+  bool has_vector_;            // Do we have sse2/neon instructions?
+  bool has_clflush_;           // Do we have clflush instructions?
+  bool use_flush_page_cache_;  // Do we need to flush the page cache?
 
-
-  time_t time_initialized_;      // Start time of test.
+  time_t time_initialized_;  // Start time of test.
 
   vector<cpu_set_t> cpu_sets_;   // Cache for cpu masks.
   vector<bool> cpu_sets_valid_;  // If the cpu mask cache is valid.

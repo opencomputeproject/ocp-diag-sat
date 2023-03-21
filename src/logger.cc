@@ -27,7 +27,6 @@
 // so these includes are correct.
 #include "sattypes.h"
 
-
 Logger *Logger::GlobalLogger() {
   static Logger logger;
   return &logger;
@@ -103,8 +102,8 @@ void Logger::QueueLogLine(string *line) {
   LOGGER_ASSERT(0 == pthread_mutex_lock(&queued_lines_mutex_));
   if (thread_running_) {
     if (queued_lines_.size() >= kMaxQueueSize) {
-      LOGGER_ASSERT(0 == pthread_cond_wait(&full_queue_cond_,
-                                           &queued_lines_mutex_));
+      LOGGER_ASSERT(0 ==
+                    pthread_cond_wait(&full_queue_cond_, &queued_lines_mutex_));
     }
     if (queued_lines_.empty()) {
       LOGGER_ASSERT(0 == pthread_cond_signal(&queued_lines_cond_));
@@ -129,19 +128,19 @@ void Logger::WriteAndDeleteLogLine(string *line) {
 }
 
 void *Logger::StartRoutine(void *ptr) {
-  Logger *self = static_cast<Logger*>(ptr);
+  Logger *self = static_cast<Logger *>(ptr);
   self->ThreadMain();
   return NULL;
 }
 
 void Logger::ThreadMain() {
-  vector<string*> local_queue;
+  vector<string *> local_queue;
   LOGGER_ASSERT(0 == pthread_mutex_lock(&queued_lines_mutex_));
 
   for (;;) {
     if (queued_lines_.empty()) {
-      LOGGER_ASSERT(0 == pthread_cond_wait(&queued_lines_cond_,
-                                           &queued_lines_mutex_));
+      LOGGER_ASSERT(
+          0 == pthread_cond_wait(&queued_lines_cond_, &queued_lines_mutex_));
       continue;
     }
 
@@ -155,7 +154,7 @@ void Logger::ThreadMain() {
 
     // Unlock while we process our local queue.
     LOGGER_ASSERT(0 == pthread_mutex_unlock(&queued_lines_mutex_));
-    for (vector<string*>::const_iterator it = local_queue.begin();
+    for (vector<string *>::const_iterator it = local_queue.begin();
          it != local_queue.end(); ++it) {
       if (*it == NULL) {
         // NULL is guaranteed to be at the end.

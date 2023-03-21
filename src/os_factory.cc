@@ -15,16 +15,15 @@
 // This file generates an OS interface class consistant with the
 // current machine type. No machine type detection is currently done.
 
-#include <stdlib.h>
 #include <stdio.h>
-#include <sys/ioctl.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 
 #include <map>
 #include <string>
 
 #include "os.h"
-
 
 // Select the proper OS and hardware interface.
 OsLayer *OsLayerFactory(const std::map<std::string, std::string> &options) {

@@ -18,6 +18,7 @@
 // This file must work with autoconf on its public version,
 // so these includes are correct.
 #include "finelock_queue.h"
+
 #include "os.h"
 
 // Page entry queue implementation follows.
@@ -32,10 +33,8 @@
 // In this implementation, a free page is those page entries where pattern is
 // null (pe->pattern == 0)
 
-
 // Constructor: Allocates memory and initialize locks.
-FineLockPEQueue::FineLockPEQueue(
-                 uint64 queuesize, int64 pagesize) {
+FineLockPEQueue::FineLockPEQueue(uint64 queuesize, int64 pagesize) {
   q_size_ = queuesize;
   pages_ = new struct page_entry[q_size_];
   pagelocks_ = new pthread_mutex_t[q_size_];
@@ -46,13 +45,13 @@ FineLockPEQueue::FineLockPEQueue(
 
   {  // Init all the page locks.
     for (uint64 i = 0; i < q_size_; i++) {
-        pthread_mutex_init(&(pagelocks_[i]), NULL);
-        // Pages start out owned (locked) by Sat::InitializePages.
-        // A locked state indicates that the page state is unknown,
-        // and the lock should not be aquired. As InitializePages creates
-        // the page records, they will be inserted and unlocked, at which point
-        // they are ready to be aquired and filled by worker threads.
-        sat_assert(pthread_mutex_lock(&(pagelocks_[i])) == 0);
+      pthread_mutex_init(&(pagelocks_[i]), NULL);
+      // Pages start out owned (locked) by Sat::InitializePages.
+      // A locked state indicates that the page state is unknown,
+      // and the lock should not be aquired. As InitializePages creates
+      // the page records, they will be inserted and unlocked, at which point
+      // they are ready to be aquired and filled by worker threads.
+      sat_assert(pthread_mutex_lock(&(pagelocks_[i])) == 0);
     }
   }
 
@@ -111,8 +110,7 @@ int64 FineLockPEQueue::getA(int64 m) {
     if (((remaining / i) * i) == remaining) {
       remaining /= i;
       // Keep dividing it out until there's no more.
-      while (((remaining / i) * i) == remaining)
-        remaining /= i;
+      while (((remaining / i) * i) == remaining) remaining /= i;
       a *= i;
     }
   }
@@ -120,7 +118,6 @@ int64 FineLockPEQueue::getA(int64 m) {
   // Return 'a' as specified.
   return (a + 1) % m;
 }
-
 
 // Part of building a linear congruential generator n1 = (a * n0 + c) % m
 // Get a prime number approx 3/4 the size of our queue.
@@ -148,15 +145,13 @@ int64 FineLockPEQueue::getC(int64 m) {
 // Destructor: Clean-up allocated memory and destroy pthread locks.
 FineLockPEQueue::~FineLockPEQueue() {
   uint64 i;
-  for (i = 0; i < q_size_; i++)
-    pthread_mutex_destroy(&(pagelocks_[i]));
+  for (i = 0; i < q_size_; i++) pthread_mutex_destroy(&(pagelocks_[i]));
   delete[] pagelocks_;
   delete[] pages_;
   for (i = 0; i < 4; i++) {
     pthread_mutex_destroy(&(randlocks_[i]));
   }
 }
-
 
 bool FineLockPEQueue::QueueAnalysis() {
   const char *measurement = "Error";
@@ -177,8 +172,7 @@ bool FineLockPEQueue::QueueAnalysis() {
     uint32 readcount = pages_[i].touch;
     int b = 0;
     for (b = 0; b < 31; b++) {
-      if (readcount < (1u << b))
-        break;
+      if (readcount < (1u << b)) break;
     }
 
     buckets[b]++;
@@ -187,8 +181,8 @@ bool FineLockPEQueue::QueueAnalysis() {
   logprintf(12, "Log:  %s histogram\n", measurement);
   for (int b = 0; b < 32; b++) {
     if (buckets[b])
-      logprintf(12, "Log:  %12d - %12d: %12d\n",
-          ((1 << b) >> 1), 1 << b, buckets[b]);
+      logprintf(12, "Log:  %12d - %12d: %12d\n", ((1 << b) >> 1), 1 << b,
+                buckets[b]);
   }
 
   return true;
@@ -206,7 +200,7 @@ bool err_log_callback(uint64 paddr, string *buf) {
   }
   return false;
 }
-}
+}  // namespace
 
 // Setup global state for exporting callback.
 void FineLockPEQueue::set_os(OsLayer *os) {
@@ -238,7 +232,7 @@ bool FineLockPEQueue::ErrorLogCallback(uint64 paddr, string *message) {
   // Find vaddr of this paddr. Make sure it matches,
   // as sometimes virtual memory is not contiguous.
   char *vaddr =
-    reinterpret_cast<char*>(os->PrepareTestMem(pe.offset, page_size_));
+      reinterpret_cast<char *>(os->PrepareTestMem(pe.offset, page_size_));
   uint64 new_paddr = os->VirtualToPhysical(vaddr + addr_diff);
   os->ReleaseTestMem(vaddr, pe.offset, page_size_);
 
@@ -258,8 +252,8 @@ bool FineLockPEQueue::ErrorLogCallback(uint64 paddr, string *message) {
     data.l32.l = pe.lastpattern->pattern(offset << 1);
     data.l32.h = pe.lastpattern->pattern((offset << 1) + 1);
 
-    snprintf(buf, sizeof(buf), " %s data=%#016llx",
-                  pe.lastpattern->name(), data.l64);
+    snprintf(buf, sizeof(buf), " %s data=%#016llx", pe.lastpattern->name(),
+             data.l64);
     message->append(buf);
   }
   snprintf(buf, sizeof(buf), " tsc=%#llx)", pe.ts);
@@ -267,8 +261,7 @@ bool FineLockPEQueue::ErrorLogCallback(uint64 paddr, string *message) {
   return true;
 }
 
-bool FineLockPEQueue::GetPageFromPhysical(uint64 paddr,
-                                          struct page_entry *pe) {
+bool FineLockPEQueue::GetPageFromPhysical(uint64 paddr, struct page_entry *pe) {
   // Traverse through array until finding a page
   // that contains the address we want..
   for (uint64 i = 0; i < q_size_; i++) {
@@ -281,7 +274,6 @@ bool FineLockPEQueue::GetPageFromPhysical(uint64 paddr,
   }
   return false;
 }
-
 
 // Get a random number from the slot we locked.
 uint64 FineLockPEQueue::GetRandom64FromSlot(int slot) {
@@ -316,7 +308,6 @@ uint64 FineLockPEQueue::GetRandom64() {
   return 0;
 }
 
-
 // Helper function to get a random page entry with given predicate,
 // ie, page_is_valid() or page_is_empty() as defined in finelock_queue.h.
 //
@@ -324,11 +315,9 @@ uint64 FineLockPEQueue::GetRandom64() {
 // indicates that we need a tag match, otherwise any tag will do.
 //
 // Returns true on success, false on failure.
-bool FineLockPEQueue::GetRandomWithPredicateTag(struct page_entry *pe,
-                      bool (*pred_func)(struct page_entry*),
-                      int32 tag) {
-  if (!pe || !q_size_)
-    return false;
+bool FineLockPEQueue::GetRandomWithPredicateTag(
+    struct page_entry *pe, bool (*pred_func)(struct page_entry *), int32 tag) {
+  if (!pe || !q_size_) return false;
 
   // Randomly index into page entry array.
   uint64 first_try = GetRandom64() % q_size_;
@@ -348,12 +337,10 @@ bool FineLockPEQueue::GetRandomWithPredicateTag(struct page_entry *pe,
     }
 
     // If page does not meet predicate, don't trylock (expensive).
-    if (!(pred_func)(&pages_[index]))
-      continue;
+    if (!(pred_func)(&pages_[index])) continue;
 
     // If page does not meet tag predicate, don't trylock (expensive).
-    if ((tag != kDontCareTag) && !(pages_[index].tag & tag))
-      continue;
+    if ((tag != kDontCareTag) && !(pages_[index].tag & tag)) continue;
 
     if (pthread_mutex_trylock(&(pagelocks_[index])) == 0) {
       // If page property (valid/empty) changes before successfully locking,
@@ -368,11 +355,9 @@ bool FineLockPEQueue::GetRandomWithPredicateTag(struct page_entry *pe,
         // Add metrics as necessary.
         if (pred_func == page_is_valid) {
           // Measure time to fetch valid page.
-          if (queue_metric_ == kTries)
-            pe->touch = i;
+          if (queue_metric_ == kTries) pe->touch = i;
           // Measure number of times each page is read.
-          if (queue_metric_ == kTouch)
-            pe->touch++;
+          if (queue_metric_ == kTouch) pe->touch++;
         }
 
         return true;
@@ -384,11 +369,10 @@ bool FineLockPEQueue::GetRandomWithPredicateTag(struct page_entry *pe,
 }
 
 // Without tag hint.
-bool FineLockPEQueue::GetRandomWithPredicate(struct page_entry *pe,
-                      bool (*pred_func)(struct page_entry*)) {
+bool FineLockPEQueue::GetRandomWithPredicate(
+    struct page_entry *pe, bool (*pred_func)(struct page_entry *)) {
   return GetRandomWithPredicateTag(pe, pred_func, kDontCareTag);
 }
-
 
 // GetValid() randomly finds a valid page, locks it and returns page entry by
 // pointer.
@@ -418,12 +402,10 @@ bool FineLockPEQueue::GetEmpty(struct page_entry *pe) {
 //
 // Returns true on success, false on failure.
 bool FineLockPEQueue::PutEmpty(struct page_entry *pe) {
-  if (!pe || !q_size_)
-    return false;
+  if (!pe || !q_size_) return false;
 
   int64 index = pe->offset / page_size_;
-  if (!valid_index(index))
-    return false;
+  if (!valid_index(index)) return false;
 
   pages_[index] = *pe;
   // Enforce that page entry is indeed empty.
@@ -436,12 +418,10 @@ bool FineLockPEQueue::PutEmpty(struct page_entry *pe) {
 //
 // Returns true on success, false on failure.
 bool FineLockPEQueue::PutValid(struct page_entry *pe) {
-  if (!pe || !page_is_valid(pe) || !q_size_)
-    return false;
+  if (!pe || !page_is_valid(pe) || !q_size_) return false;
 
   int64 index = pe->offset / page_size_;
-  if (!valid_index(index))
-    return false;
+  if (!valid_index(index)) return false;
 
   pages_[index] = *pe;
   return (pthread_mutex_unlock(&(pagelocks_[index])) == 0);

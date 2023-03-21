@@ -30,7 +30,6 @@
 // outstanding at any point.
 static const size_t kMaxQueueSize = 250;
 
-
 // This is only for use by the Logger class, do not use it elsewhere!
 //
 // All Logger assertions should use this macro instead of sat_assert().
@@ -40,14 +39,13 @@ static const size_t kMaxQueueSize = 250;
 // Logging from within the wrong part of the logger would trigger a deadlock,
 // and even in places where it wouldn't there's a very good chance that the
 // logger is in no condition to handle new log lines.
-#define LOGGER_ASSERT(x) \
-{\
-  if (!(x)) {\
-    fprintf(stderr, "Assertion failed at %s:%d\n", __FILE__, __LINE__);\
-    exit(1);\
-  }\
-}
-
+#define LOGGER_ASSERT(x)                                                  \
+  {                                                                       \
+    if (!(x)) {                                                           \
+      fprintf(stderr, "Assertion failed at %s:%d\n", __FILE__, __LINE__); \
+      exit(1);                                                            \
+    }                                                                     \
+  }
 
 // This class handles logging in SAT.  It is a singleton accessed via
 // GlobalLogger().
@@ -62,9 +60,7 @@ class Logger {
 
   // Lines with a priority numerically greater than this will not be logged.
   // May not be called while multiple threads are running.
-  virtual void SetVerbosity(int verbosity) {
-    verbosity_ = verbosity;
-  }
+  virtual void SetVerbosity(int verbosity) { verbosity_ = verbosity; }
 
   // Sets a file to log to, in addition to stdout.  May not be called while
   // multiple threads are running.
@@ -79,9 +75,7 @@ class Logger {
 
   // Set output to be written to stdout only.  This is the default mode.  May
   // not be called while multiple threads are running.
-  virtual void SetStdoutOnly() {
-    log_fd_ = -1;
-  }
+  virtual void SetStdoutOnly() { log_fd_ = -1; }
 
   // Enable or disable logging of timestamps.
   void SetTimestampLogging(bool log_ts_enabled) {
@@ -134,7 +128,7 @@ class Logger {
   int log_fd_;
   bool thread_running_;
   bool log_timestamps_;
-  vector<string*> queued_lines_;
+  vector<string *> queued_lines_;
   // This doubles as a mutex for log_fd_ when the logging thread is not running.
   pthread_mutex_t queued_lines_mutex_;
   // Lets the logging thread know that the queue is no longer empty.

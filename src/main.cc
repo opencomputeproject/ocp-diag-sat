@@ -14,8 +14,8 @@
 
 // sat.cc : a stress test for stressful testing
 
-#include "sattypes.h"
 #include "sat.h"
+#include "sattypes.h"
 
 int main(int argc, char **argv) {
   Sat *sat = SatFactory();
@@ -42,7 +42,8 @@ int main(int argc, char **argv) {
 
   int retval;
   if (sat->status() != 0) {
-    logprintf(0, "Process Error: Fatal issue encountered. See above logs for "
+    logprintf(0,
+              "Process Error: Fatal issue encountered. See above logs for "
               "details.\n");
     retval = 1;
   } else if (sat->errors() != 0) {

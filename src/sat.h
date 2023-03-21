@@ -26,10 +26,10 @@
 // This file must work with autoconf on its public version,
 // so these includes are correct.
 #include "finelock_queue.h"
+#include "os.h"
 #include "queue.h"
 #include "sattypes.h"
 #include "worker.h"
-#include "os.h"
 
 // SAT stress test class.
 class Sat {
@@ -97,8 +97,7 @@ class Sat {
   int32 region_find(int32 num) const {
     for (int i = 0; i < 32; i++) {
       if ((1 << i) & region_mask_) {
-        if (num == 0)
-          return i;
+        if (num == 0) return i;
         num--;
       }
     }
@@ -159,7 +158,7 @@ class Sat {
   uint64 paddr_base_;                 // Physical address base.
   uint64 channel_hash_;               // Mask of address bits XORed for channel.
   int channel_width_;                 // Channel width in bits.
-  vector< vector<string> > channels_;  // Memory module names per channel.
+  vector<vector<string> > channels_;  // Memory module names per channel.
 
   // Control flags.
   volatile sig_atomic_t user_break_;  // User has signalled early exit.  Used as
@@ -172,91 +171,91 @@ class Sat {
   bool stop_on_error_;                // Exit immendiately on any error.
   bool findfiles_;                    // Autodetect tempfile locations.
 
-  bool error_injection_;              // Simulate errors, for unittests.
-  bool crazy_error_injection_;        // Simulate lots of errors.
-  uint64 max_errorcount_;             // Number of errors before forced exit.
-  int run_on_anything_;               // Ignore unknown machine ereor.
-  bool use_logfile_;                  // Log to a file.
-  char logfilename_[255];             // Name of file to log to.
-  int logfile_;                       // File handle to log to.
-  bool log_timestamps_;               // Whether to add timestamps to log lines.
+  bool error_injection_;        // Simulate errors, for unittests.
+  bool crazy_error_injection_;  // Simulate lots of errors.
+  uint64 max_errorcount_;       // Number of errors before forced exit.
+  int run_on_anything_;         // Ignore unknown machine ereor.
+  bool use_logfile_;            // Log to a file.
+  char logfilename_[255];       // Name of file to log to.
+  int logfile_;                 // File handle to log to.
+  bool log_timestamps_;         // Whether to add timestamps to log lines.
 
   // Disk thread options.
-  int read_block_size_;               // Size of block to read from disk.
-  int write_block_size_;              // Size of block to write to disk.
-  int64 segment_size_;                // Size of segment to split disk into.
-  int cache_size_;                    // Size of disk cache.
-  int blocks_per_segment_;            // Number of blocks to test per segment.
-  int read_threshold_;                // Maximum time (in us) a read should take
-                                      // before warning of a slow read.
-  int write_threshold_;               // Maximum time (in us) a write should
-                                      // take before warning of a slow write.
-  int non_destructive_;               // Whether to use non-destructive mode for
-                                      // the disk test.
+  int read_block_size_;     // Size of block to read from disk.
+  int write_block_size_;    // Size of block to write to disk.
+  int64 segment_size_;      // Size of segment to split disk into.
+  int cache_size_;          // Size of disk cache.
+  int blocks_per_segment_;  // Number of blocks to test per segment.
+  int read_threshold_;      // Maximum time (in us) a read should take
+                            // before warning of a slow read.
+  int write_threshold_;     // Maximum time (in us) a write should
+                            // take before warning of a slow write.
+  int non_destructive_;     // Whether to use non-destructive mode for
+                            // the disk test.
 
   // Generic Options.
-  int monitor_mode_;                  // Switch for monitor-only mode SAT.
-                                      // This switch trumps most of the other
-                                      // argument, as SAT will only run error
-                                      // polling threads.
-  int tag_mode_;                      // Do tagging of memory and strict
-                                      // checking for misplaced cachelines.
+  int monitor_mode_;  // Switch for monitor-only mode SAT.
+                      // This switch trumps most of the other
+                      // argument, as SAT will only run error
+                      // polling threads.
+  int tag_mode_;      // Do tagging of memory and strict
+                      // checking for misplaced cachelines.
 
-  bool do_page_map_;                  // Should we print a list of used pages?
-  unsigned char *page_bitmap_;        // Store bitmap of physical pages seen.
-  uint64 page_bitmap_size_;           // Length of physical memory represented.
+  bool do_page_map_;            // Should we print a list of used pages?
+  unsigned char *page_bitmap_;  // Store bitmap of physical pages seen.
+  uint64 page_bitmap_size_;     // Length of physical memory represented.
 
   // Cpu Cache Coherency Options.
-  bool cc_test_;                      // Flag to decide whether to start the
-                                      // cache coherency threads.
-  int cc_cacheline_count_;            // Number of cache line size structures.
-  int cc_cacheline_size_;             // Size of a cache line.
-  int cc_inc_count_;                  // Number of times to increment the shared
-                                      // cache lines structure members.
+  bool cc_test_;            // Flag to decide whether to start the
+                            // cache coherency threads.
+  int cc_cacheline_count_;  // Number of cache line size structures.
+  int cc_cacheline_size_;   // Size of a cache line.
+  int cc_inc_count_;        // Number of times to increment the shared
+                            // cache lines structure members.
 
   // Cpu Frequency Options.
-  bool cpu_freq_test_;                // Flag to decide whether to start the
-                                      // cpu frequency thread.
-  int cpu_freq_threshold_;            // The MHz threshold which will cause
-                                      // the test to fail.
-  int cpu_freq_round_;                // Round the computed frequency to this
-                                      // value.
+  bool cpu_freq_test_;      // Flag to decide whether to start the
+                            // cpu frequency thread.
+  int cpu_freq_threshold_;  // The MHz threshold which will cause
+                            // the test to fail.
+  int cpu_freq_round_;      // Round the computed frequency to this
+                            // value.
 
   // Thread control.
-  int file_threads_;                  // Threads of file IO.
-  int net_threads_;                   // Threads of network IO.
-  int listen_threads_;                // Threads for network IO to connect.
-  int memory_threads_;                // Threads of memcpy.
-  int invert_threads_;                // Threads of invert.
-  int fill_threads_;                  // Threads of memset.
-  int check_threads_;                 // Threads of strcmp.
-  int cpu_stress_threads_;            // Threads of CPU stress workload.
-  int disk_threads_;                  // Threads of disk test.
-  int random_threads_;                // Number of random disk threads.
-  int total_threads_;                 // Total threads used.
-  bool error_poll_;                   // Poll for system errors.
+  int file_threads_;        // Threads of file IO.
+  int net_threads_;         // Threads of network IO.
+  int listen_threads_;      // Threads for network IO to connect.
+  int memory_threads_;      // Threads of memcpy.
+  int invert_threads_;      // Threads of invert.
+  int fill_threads_;        // Threads of memset.
+  int check_threads_;       // Threads of strcmp.
+  int cpu_stress_threads_;  // Threads of CPU stress workload.
+  int disk_threads_;        // Threads of disk test.
+  int random_threads_;      // Number of random disk threads.
+  int total_threads_;       // Total threads used.
+  bool error_poll_;         // Poll for system errors.
 
   // Resources.
   cc_cacheline_data *cc_cacheline_data_;  // The cache line sized datastructure
                                           // used by the ccache threads
                                           // (in worker.h).
-  vector<string> filename_;           // Filenames for file IO.
-  vector<string> ipaddrs_;            // Addresses for network IO.
-  vector<string> diskfilename_;       // Filename for disk IO device.
+  vector<string> filename_;               // Filenames for file IO.
+  vector<string> ipaddrs_;                // Addresses for network IO.
+  vector<string> diskfilename_;           // Filename for disk IO device.
   // Block table for IO device.
-  vector<DiskBlockTable*> blocktables_;
+  vector<DiskBlockTable *> blocktables_;
 
-  bool use_affinity_;                 // Should stressapptest set cpu affinity?
-  int32 region_mask_;                 // Bitmask of available NUMA regions.
-  int32 region_count_;                // Count of available NUMA regions.
-  int32 region_[32];                  // Pagecount per region.
-  int region_mode_;                   // What to do with NUMA hints?
-  static const int kLocalNuma = 1;    // Target local memory.
-  static const int kRemoteNuma = 2;   // Target remote memory.
+  bool use_affinity_;                // Should stressapptest set cpu affinity?
+  int32 region_mask_;                // Bitmask of available NUMA regions.
+  int32 region_count_;               // Count of available NUMA regions.
+  int32 region_[32];                 // Pagecount per region.
+  int region_mode_;                  // What to do with NUMA hints?
+  static const int kLocalNuma = 1;   // Target local memory.
+  static const int kRemoteNuma = 2;  // Target remote memory.
 
   // Results.
-  int64 errorcount_;                  // Total hardware incidents seen.
-  int statuscount_;                   // Total test errors seen.
+  int64 errorcount_;  // Total hardware incidents seen.
+  int statuscount_;   // Total test errors seen.
 
   // Thread type constants and types
   enum ThreadType {
@@ -278,8 +277,8 @@ class Sat {
   virtual void AcquireWorkerLock();
   virtual void ReleaseWorkerLock();
   pthread_mutex_t worker_lock_;  // Lock access to the worker thread structure.
-  typedef vector<WorkerThread*> WorkerVector;
-  typedef map<int, WorkerVector*> WorkerMap;
+  typedef vector<WorkerThread *> WorkerVector;
+  typedef map<int, WorkerVector *> WorkerMap;
   // Contains all worker threads.
   WorkerMap workers_map_;
   // Delay between power spikes.
@@ -291,11 +290,11 @@ class Sat {
   // For the workers we never pause.
   WorkerStatus continuous_status_;
 
-  class OsLayer *os_;                   // Os abstraction: put hacks here.
-  class PatternList *patternlist_;      // Access to global data patterns.
+  class OsLayer *os_;               // Os abstraction: put hacks here.
+  class PatternList *patternlist_;  // Access to global data patterns.
 
   // RunAnalysis methods
-  void AnalysisAllStats();              // Summary of all runs.
+  void AnalysisAllStats();  // Summary of all runs.
   void MemoryStats();
   void FileStats();
   void NetStats();
@@ -311,8 +310,7 @@ class Sat {
   void AddrMapPrint();
 
   // additional memory data from google-specific tests.
-  virtual void GoogleMemoryStats(float *memcopy_data,
-                                 float *memcopy_bandwidth);
+  virtual void GoogleMemoryStats(float *memcopy_data, float *memcopy_bandwidth);
 
   virtual void GoogleOsOptions(std::map<std::string, std::string> *options);
 
@@ -322,7 +320,7 @@ class Sat {
   class PageEntryQueue *valid_;        // Page queue structure, valid pages.
   class PageEntryQueue *empty_;        // Page queue structure, free pages.
   class FineLockPEQueue *finelock_q_;  // Page queue with fine-grain locks
-  Sat::PageQueueType pe_q_implementation_;   // Queue implementation switch
+  Sat::PageQueueType pe_q_implementation_;  // Queue implementation switch
 
   DISALLOW_COPY_AND_ASSIGN(Sat);
 };

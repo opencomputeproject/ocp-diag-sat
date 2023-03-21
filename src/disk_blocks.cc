@@ -21,15 +21,16 @@
 #include <utility>
 
 // BlockData
-BlockData::BlockData() : address_(0), size_(0),
-                         references_(0), initialized_(false),
-                         pattern_(NULL) {
+BlockData::BlockData()
+    : address_(0),
+      size_(0),
+      references_(0),
+      initialized_(false),
+      pattern_(NULL) {
   pthread_mutex_init(&data_mutex_, NULL);
 }
 
-BlockData::~BlockData() {
-  pthread_mutex_destroy(&data_mutex_);
-}
+BlockData::~BlockData() { pthread_mutex_destroy(&data_mutex_); }
 
 void BlockData::set_initialized() {
   pthread_mutex_lock(&data_mutex_);
@@ -45,9 +46,13 @@ bool BlockData::initialized() const {
 }
 
 // DiskBlockTable
-DiskBlockTable::DiskBlockTable() : sector_size_(0), write_block_size_(0),
-                                   device_name_(""), device_sectors_(0),
-                                   segment_size_(0), size_(0) {
+DiskBlockTable::DiskBlockTable()
+    : sector_size_(0),
+      write_block_size_(0),
+      device_name_(""),
+      device_sectors_(0),
+      segment_size_(0),
+      size_(0) {
   pthread_mutex_init(&data_mutex_, NULL);
   pthread_mutex_init(&parameter_mutex_, NULL);
   pthread_cond_init(&data_condition_, NULL);
@@ -105,8 +110,8 @@ int DiskBlockTable::RemoveBlock(BlockData *block) {
   if (it != addr_to_block_.end()) {
     int curr_pos = it->second->pos;
     int last_pos = size_ - 1;
-    AddrToBlockMap::iterator last_it = addr_to_block_.find(
-        pos_to_addr_[last_pos]);
+    AddrToBlockMap::iterator last_it =
+        addr_to_block_.find(pos_to_addr_[last_pos]);
     sat_assert(size_ > 0);
     sat_assert(last_it != addr_to_block_.end());
     // Everything is fine, removing block from table.
@@ -148,7 +153,7 @@ BlockData *DiskBlockTable::GetRandomBlock() {
   struct timespec ts;
   struct timeval tp;
   gettimeofday(&tp, NULL);
-  ts.tv_sec  = tp.tv_sec;
+  ts.tv_sec = tp.tv_sec;
   ts.tv_nsec = tp.tv_usec * 1000;
   ts.tv_sec += 2;  // Wait for 2 seconds.
   int result = 0;
@@ -177,11 +182,9 @@ BlockData *DiskBlockTable::GetRandomBlock() {
   }
 }
 
-void DiskBlockTable::SetParameters(int sector_size,
-                                   int write_block_size,
-                                   int64 device_sectors,
-                                   int64 segment_size,
-                                   const string& device_name) {
+void DiskBlockTable::SetParameters(int sector_size, int write_block_size,
+                                   int64 device_sectors, int64 segment_size,
+                                   const string &device_name) {
   sat_assert(size_ == 0);
   pthread_mutex_lock(&parameter_mutex_);
   sector_size_ = sector_size;
@@ -197,8 +200,10 @@ BlockData *DiskBlockTable::GetUnusedBlock(int64 segment) {
   BlockData *block = new BlockData();
   bool good_sequence = false;
   if (block == NULL) {
-    logprintf(0, "Process Error: Unable to allocate memory "
-              "for sector data for disk %s.\n", device_name_.c_str());
+    logprintf(0,
+              "Process Error: Unable to allocate memory "
+              "for sector data for disk %s.\n",
+              device_name_.c_str());
     return NULL;
   }
   pthread_mutex_lock(&parameter_mutex_);
@@ -210,12 +215,12 @@ BlockData *DiskBlockTable::GetUnusedBlock(int64 segment) {
     // Use the entire disk or a small segment of the disk to allocate the first
     // sector in the block from.
     if (segment_size_ == -1) {
-      sector = (Random64() & 0x7FFFFFFFFFFFFFFFLL) % (
-          device_sectors_ / num_sectors);
+      sector =
+          (Random64() & 0x7FFFFFFFFFFFFFFFLL) % (device_sectors_ / num_sectors);
       sector *= num_sectors;
     } else {
-      sector = (Random64() & 0x7FFFFFFFFFFFFFFFLL) % (
-          segment_size_ / num_sectors);
+      sector =
+          (Random64() & 0x7FFFFFFFFFFFFFFFLL) % (segment_size_ / num_sectors);
       sector *= num_sectors;
       sector += segment * segment_size_;
       // Make sure the block is within the segment.

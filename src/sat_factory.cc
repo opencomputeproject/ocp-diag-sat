@@ -16,6 +16,4 @@
 
 #include "sat.h"  // NOLINT
 
-Sat *SatFactory() {
-  return new Sat();
-}
+Sat *SatFactory() { return new Sat(); }

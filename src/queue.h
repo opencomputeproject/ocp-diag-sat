@@ -21,19 +21,18 @@
 #ifndef STRESSAPPTEST_QUEUE_H_  // NOLINT
 #define STRESSAPPTEST_QUEUE_H_
 
-#include <sys/types.h>
 #include <pthread.h>
+#include <sys/types.h>
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
-#include "sattypes.h"  // NOLINT
 #include "pattern.h"   // NOLINT
+#include "sattypes.h"  // NOLINT
 
 // Tag indicating no preference.
 static const int kDontCareTag = -1;
 // Tag indicating no preference.
 static const int kInvalidTag = 0xf001;
-
 
 // This describes a block of memory, and the expected fill pattern.
 struct page_entry {
@@ -41,10 +40,10 @@ struct page_entry {
   void *addr;
   uint64 paddr;
   class Pattern *pattern;
-  int32 tag;     // These are tags for use in NUMA affinity or other uses.
-  uint32 touch;  // Counter of the number of reads from this page.
-  uint64 ts;     // Timestamp of the last read from this page.
-  uint32 lastcpu; // Last CPU to write this page.
+  int32 tag;       // These are tags for use in NUMA affinity or other uses.
+  uint32 touch;    // Counter of the number of reads from this page.
+  uint64 ts;       // Timestamp of the last read from this page.
+  uint32 lastcpu;  // Last CPU to write this page.
   class Pattern *lastpattern;  // Expected Pattern at last read.
 };
 
@@ -81,6 +80,5 @@ class PageEntryQueue {
 
   DISALLOW_COPY_AND_ASSIGN(PageEntryQueue);
 };
-
 
 #endif  // MILES_TESTS_SAT_QUEUE_H_ NOLINT

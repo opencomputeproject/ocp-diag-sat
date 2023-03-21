@@ -15,34 +15,30 @@
 // error_diag.cc: Collects device errors for analysis to more accurately
 //                pin-point failed component.
 
-#include <set>
 #include <list>
 #include <map>
+#include <set>
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
 #include "error_diag.h"
 #include "sattypes.h"
 
-
 // DeviceTree constructor.
-DeviceTree::DeviceTree(string name)
-  : parent_(0), name_(name) {
+DeviceTree::DeviceTree(string name) : parent_(0), name_(name) {
   pthread_mutex_init(&device_tree_mutex_, NULL);
 }
 
 // DeviceTree destructor.
 DeviceTree::~DeviceTree() {
   // Deallocate subtree devices.
-  for (std::map<string, DeviceTree*>::iterator itr = subdevices_.begin();
-      itr != subdevices_.end();
-      ++itr) {
+  for (std::map<string, DeviceTree *>::iterator itr = subdevices_.begin();
+       itr != subdevices_.end(); ++itr) {
     delete itr->second;
   }
   // Deallocate device errors.
-  for (std::list<ErrorInstance*>::iterator itr = errors_.begin();
-      itr != errors_.end();
-      ++itr) {
+  for (std::list<ErrorInstance *>::iterator itr = errors_.begin();
+       itr != errors_.end(); ++itr) {
     delete (*itr);
   }
   pthread_mutex_destroy(&device_tree_mutex_);
@@ -61,17 +57,15 @@ DeviceTree *DeviceTree::FindInSubTree(string name) {
 // Find named device in sub device tree (Non-atomic).
 // Returns 0 if not found
 DeviceTree *DeviceTree::UnlockedFindInSubTree(string name) {
-  std::map<string, DeviceTree*>::iterator itr = subdevices_.find(name);
+  std::map<string, DeviceTree *>::iterator itr = subdevices_.find(name);
   if (itr != subdevices_.end()) {
     return itr->second;
   } else {
     // Search sub-tree.
-    for (std::map<string, DeviceTree*>::iterator itr = subdevices_.begin();
-        itr != subdevices_.end();
-        ++itr) {
+    for (std::map<string, DeviceTree *>::iterator itr = subdevices_.begin();
+         itr != subdevices_.end(); ++itr) {
       DeviceTree *result = itr->second->UnlockedFindInSubTree(name);
-      if (result != 0)
-        return result;
+      if (result != 0) return result;
     }
     return 0;
   }
@@ -95,11 +89,10 @@ DeviceTree *DeviceTree::FindOrAddDevice(string name) {
 
 // Pretty prints device tree.
 void DeviceTree::PrettyPrint(string spacer) {
-  for (std::map<string, DeviceTree*>::iterator itr = subdevices_.begin();
-      itr != subdevices_.end();
-      ++itr) {
+  for (std::map<string, DeviceTree *>::iterator itr = subdevices_.begin();
+       itr != subdevices_.end(); ++itr) {
     printf("%s%s\n", spacer.c_str(), itr->first.c_str());
-    itr->second->PrettyPrint(spacer+spacer);
+    itr->second->PrettyPrint(spacer + spacer);
   }
 }
 
@@ -116,13 +109,11 @@ void DeviceTree::InsertSubDevice(string name) {
   pthread_mutex_unlock(&device_tree_mutex_);
 }
 
-
 // Returns true of any error associated with this device is fatal.
 bool DeviceTree::KnownBad() {
   pthread_mutex_lock(&device_tree_mutex_);
-  for (std::list<ErrorInstance*>::iterator itr = errors_.begin();
-      itr != errors_.end();
-      ++itr) {
+  for (std::list<ErrorInstance *>::iterator itr = errors_.begin();
+       itr != errors_.end(); ++itr) {
     if ((*itr)->severity_ == SAT_ERROR_FATAL) {
       pthread_mutex_unlock(&device_tree_mutex_);
       return true;
@@ -132,7 +123,6 @@ bool DeviceTree::KnownBad() {
   return false;
 }
 
-
 // ErrorDiag constructor.
 ErrorDiag::ErrorDiag() {
   os_ = 0;
@@ -141,23 +131,21 @@ ErrorDiag::ErrorDiag() {
 
 // ErrorDiag destructor.
 ErrorDiag::~ErrorDiag() {
-  if (system_tree_root_)
-    delete system_tree_root_;
+  if (system_tree_root_) delete system_tree_root_;
 }
 
 // Set platform specific handle and initialize device tree.
 // Returns false on error. true otherwise.
 bool ErrorDiag::set_os(OsLayer *os) {
   os_ = os;
-  return(InitializeDeviceTree());
+  return (InitializeDeviceTree());
 }
 
 // Create and initialize system device tree.
 // Returns false on error. true otherwise.
 bool ErrorDiag::InitializeDeviceTree() {
   system_tree_root_ = new DeviceTree("system_root");
-  if (!system_tree_root_)
-    return false;
+  if (!system_tree_root_) return false;
   return true;
 }
 
@@ -166,8 +154,7 @@ bool ErrorDiag::InitializeDeviceTree() {
 int ErrorDiag::AddCeccError(string dimm_string) {
   DeviceTree *dimm_device = system_tree_root_->FindOrAddDevice(dimm_string);
   ECCErrorInstance *error = new ECCErrorInstance;
-  if (!error)
-    return -1;
+  if (!error) return -1;
   error->severity_ = SAT_ERROR_CORRECTABLE;
   dimm_device->AddErrorInstance(error);
   return 0;
@@ -178,8 +165,7 @@ int ErrorDiag::AddCeccError(string dimm_string) {
 int ErrorDiag::AddUeccError(string dimm_string) {
   DeviceTree *dimm_device = system_tree_root_->FindOrAddDevice(dimm_string);
   ECCErrorInstance *error = new ECCErrorInstance;
-  if (!error)
-    return -1;
+  if (!error) return -1;
   error->severity_ = SAT_ERROR_FATAL;
   dimm_device->AddErrorInstance(error);
   return 0;
@@ -190,8 +176,7 @@ int ErrorDiag::AddUeccError(string dimm_string) {
 int ErrorDiag::AddMiscompareError(string dimm_string, uint64 addr, int count) {
   DeviceTree *dimm_device = system_tree_root_->FindOrAddDevice(dimm_string);
   MiscompareErrorInstance *error = new MiscompareErrorInstance;
-  if (!error)
-    return -1;
+  if (!error) return -1;
   error->severity_ = SAT_ERROR_FATAL;
   error->addr_ = addr;
   dimm_device->AddErrorInstance(error);
@@ -203,7 +188,7 @@ int ErrorDiag::AddMiscompareError(string dimm_string, uint64 addr, int count) {
 // Returns -1 on error, 1 if diagnoser reports error externally; 0 otherwise.
 string ErrorDiag::AddressToDimmString(OsLayer *os, void *addr, int offset) {
   char dimm_string[256] = "";
-  char *vbyteaddr = reinterpret_cast<char*>(addr) + offset;
+  char *vbyteaddr = reinterpret_cast<char *>(addr) + offset;
   uint64 paddr = os->VirtualToPhysical(vbyteaddr);
   os->FindDimm(paddr, dimm_string, sizeof(dimm_string));
   return string(dimm_string);
@@ -216,8 +201,7 @@ int ErrorDiag::AddHDDMiscompareError(string devicename, int block, int offset,
   bool mask_hdd_error = false;
 
   HDDMiscompareErrorInstance *error = new HDDMiscompareErrorInstance;
-  if (!error)
-    return -1;
+  if (!error) return -1;
 
   error->addr_ = reinterpret_cast<uint64>(src_addr);
   error->addr2_ = reinterpret_cast<uint64>(dst_addr);
@@ -234,8 +218,10 @@ int ErrorDiag::AddHDDMiscompareError(string devicename, int block, int offset,
     error->causes_.insert(src_dimm_dev);
     if (src_dimm_dev->KnownBad()) {
       mask_hdd_error = true;
-      logprintf(5, "Log: supressed %s miscompare report: "
-                "known bad source: %s\n", devicename.c_str(), src_dimm.c_str());
+      logprintf(5,
+                "Log: supressed %s miscompare report: "
+                "known bad source: %s\n",
+                devicename.c_str(), src_dimm.c_str());
     }
   }
   if (dst_dimm.compare("DIMM Unknown")) {
@@ -244,9 +230,10 @@ int ErrorDiag::AddHDDMiscompareError(string devicename, int block, int offset,
     error->causes_.insert(dst_dimm_dev);
     if (dst_dimm_dev->KnownBad()) {
       mask_hdd_error = true;
-      logprintf(5, "Log: supressed %s miscompare report: "
-                "known bad destination: %s\n", devicename.c_str(),
-                dst_dimm.c_str());
+      logprintf(5,
+                "Log: supressed %s miscompare report: "
+                "known bad destination: %s\n",
+                devicename.c_str(), dst_dimm.c_str());
     }
   }
 
@@ -270,8 +257,7 @@ int ErrorDiag::AddHDDSectorTagError(string devicename, int block, int offset,
   bool mask_hdd_error = false;
 
   HDDSectorTagErrorInstance *error = new HDDSectorTagErrorInstance;
-  if (!error)
-    return -1;
+  if (!error) return -1;
 
   error->addr_ = reinterpret_cast<uint64>(src_addr);
   error->addr2_ = reinterpret_cast<uint64>(dst_addr);
@@ -288,8 +274,10 @@ int ErrorDiag::AddHDDSectorTagError(string devicename, int block, int offset,
     error->causes_.insert(src_dimm_dev);
     if (src_dimm_dev->KnownBad()) {
       mask_hdd_error = true;
-      logprintf(5, "Log: supressed %s sector tag error report: "
-                "known bad source: %s\n", devicename.c_str(), src_dimm.c_str());
+      logprintf(5,
+                "Log: supressed %s sector tag error report: "
+                "known bad source: %s\n",
+                devicename.c_str(), src_dimm.c_str());
     }
   }
   if (dst_dimm.compare("DIMM Unknown")) {
@@ -298,9 +286,10 @@ int ErrorDiag::AddHDDSectorTagError(string devicename, int block, int offset,
     error->causes_.insert(dst_dimm_dev);
     if (dst_dimm_dev->KnownBad()) {
       mask_hdd_error = true;
-      logprintf(5, "Log: supressed %s sector tag error report: "
-                "known bad destination: %s\n", devicename.c_str(),
-                dst_dimm.c_str());
+      logprintf(5,
+                "Log: supressed %s sector tag error report: "
+                "known bad destination: %s\n",
+                devicename.c_str(), dst_dimm.c_str());
     }
   }
 

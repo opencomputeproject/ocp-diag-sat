@@ -24,7 +24,6 @@
 // Page entry queue implementation follows.
 // Push inserts pages, pop returns a random entry.
 
-
 PageEntryQueue::PageEntryQueue(uint64 queuesize) {
   // There must always be one empty queue location,
   // since in == out => empty.
@@ -46,8 +45,7 @@ int PageEntryQueue::Push(struct page_entry *pe) {
   int result = 0;
   int64 nextnextin;
 
-  if (!pe)
-    return 0;
+  if (!pe) return 0;
 
   pthread_mutex_lock(&q_mutex_);
   nextnextin = (nextin_ + 1) % q_size_;
@@ -74,8 +72,7 @@ int PageEntryQueue::PopRandom(struct page_entry *pe) {
   int64 newindex;
   struct page_entry tmp;
 
-  if (!pe)
-    return 0;
+  if (!pe) return 0;
 
   // TODO(nsanders): we should improve random to get 64 bit randoms, and make
   // it more thread friendly.
@@ -85,7 +82,6 @@ int PageEntryQueue::PopRandom(struct page_entry *pe) {
   if (retval)
     logprintf(0, "Process Error: pthreads mutex failure %d\n", retval);
 
-
   if (nextin_ != nextout_) {
     // Randomized fetch.
     // Swap random entry with next out.
@@ -94,8 +90,7 @@ int PageEntryQueue::PopRandom(struct page_entry *pe) {
       entries = (lastin - nextout_ + q_size_) % q_size_;
 
       newindex = nextout_;
-      if (entries)
-        newindex = ((rand % entries) + nextout_) % q_size_;
+      if (entries) newindex = ((rand % entries) + nextout_) % q_size_;
 
       // Swap the pages.
       tmp = pages_[nextout_];
