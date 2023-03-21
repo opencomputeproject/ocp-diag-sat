@@ -18,6 +18,7 @@
 
 #include "finelock_queue.h"
 #include "ocpdiag/core/results/test_run.h"
+#include "ocpdiag/core/results/test_step.h"
 #include "os.h"
 #include "queue.h"
 #include "sattypes.h"
@@ -137,20 +138,20 @@ class Sat {
   string cmdline_json_;
 
   // Memory and test configuration.
-  int runtime_seconds_;               // Seconds to run.
-  int page_length_;                   // Length of each memory block.
-  int64 pages_;                       // Number of memory blocks.
-  int64 size_;                        // Size of memory tested, in bytes.
-  int64 size_mb_;                     // Size of memory tested, in MB.
-  int64 reserve_mb_;                  // Reserve at least this amount of memory
-                                      // for the system, in MB.
-  int64 min_hugepages_mbytes_;        // Minimum hugepages size.
-  int64 freepages_;                   // How many invalid pages we need.
-  int disk_pages_;                    // Number of pages per temp file.
-  uint64 paddr_base_;                 // Physical address base.
-  uint64 channel_hash_;               // Mask of address bits XORed for channel.
-  int channel_width_;                 // Channel width in bits.
-  vector<vector<string> > channels_;  // Memory module names per channel.
+  int runtime_seconds_;              // Seconds to run.
+  int page_length_;                  // Length of each memory block.
+  int64 pages_;                      // Number of memory blocks.
+  int64 size_;                       // Size of memory tested, in bytes.
+  int64 size_mb_;                    // Size of memory tested, in MB.
+  int64 reserve_mb_;                 // Reserve at least this amount of memory
+                                     // for the system, in MB.
+  int64 min_hugepages_mbytes_;       // Minimum hugepages size.
+  int64 freepages_;                  // How many invalid pages we need.
+  int disk_pages_;                   // Number of pages per temp file.
+  uint64 paddr_base_;                // Physical address base.
+  uint64 channel_hash_;              // Mask of address bits XORed for channel.
+  int channel_width_;                // Channel width in bits.
+  vector<vector<string>> channels_;  // Memory module names per channel.
 
   // Control flags.
   volatile sig_atomic_t user_break_;  // User has signalled early exit.  Used as
@@ -315,6 +316,7 @@ class Sat {
   Sat::PageQueueType pe_q_implementation_;  // Queue implementation switch
 
   std::unique_ptr<ocpdiag::results::TestRun> test_run_ = nullptr;
+  vector<std::unique_ptr<ocpdiag::results::TestStep>> thread_test_steps_;
 
   DISALLOW_COPY_AND_ASSIGN(Sat);
 };

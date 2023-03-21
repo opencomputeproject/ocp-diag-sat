@@ -36,12 +36,16 @@
 // so these includes are correct.
 #include "disk_blocks.h"
 #include "logger.h"
+#include "ocpdiag/core/results/data_model/dut_info.h"
 #include "ocpdiag/core/results/data_model/input_model.h"
 #include "ocpdiag/core/results/data_model/input_model_helpers.h"
+#include "ocpdiag/core/results/test_step.h"
 #include "os.h"
 #include "sat.h"
 #include "sattypes.h"
 #include "worker.h"
+
+using ::ocpdiag::results::TestStep;
 
 // stressapptest versioning here.
 static const char *kVersion = "1.0.0";
@@ -385,6 +389,9 @@ void Sat::AddrMapPrint() {
 
 // Initializes page lists and fills pages with data patterns.
 bool Sat::InitializePages() {
+  // TODO(b/273821926) Populate fill memory pages step
+  auto fill_step = std::make_unique<TestStep>("Fill Memory Pages", *test_run_);
+
   int result = 1;
   // Calculate needed page totals.
   int64 neededpages = memory_threads_ + invert_threads_ + check_threads_ +
@@ -443,7 +450,8 @@ bool Sat::InitializePages() {
   // Initialize the fill threads.
   for (int i = 0; i < fill_threads_; i++) {
     FillThread *thread = new FillThread();
-    thread->InitThread(i, this, os_, patternlist_, &fill_status);
+    thread->InitThread(i, this, os_, patternlist_, &fill_status,
+                       fill_step.get());
     if (i != fill_threads_ - 1) {
       logprintf(12, "Starting Fill Threads %d: %d pages\n", i,
                 pages_ / fill_threads_);
@@ -528,15 +536,6 @@ bool Sat::InitializePages() {
   return true;
 }
 
-// Print SAT version info.
-bool Sat::PrintVersion() {
-  logprintf(1, "Stats: SAT revision %s, %d bit binary\n", kVersion,
-            address_mode_);
-  logprintf(5, "Log: %s from %s\n", Timestamp(), BuildChangelist());
-
-  return true;
-}
-
 // Initializes the resources that SAT needs to run.
 // This needs to be called before Run(), and after ParseArgs().
 // Returns true on success, false on error, and will exit() on help message.
@@ -556,8 +555,13 @@ bool Sat::Initialize() {
   Logger::GlobalLogger()->SetTimestampLogging(log_timestamps_);
   Logger::GlobalLogger()->StartThread();
 
-  logprintf(5, "Log: Commandline - %s\n", cmdline_.c_str());
-  PrintVersion();
+  // TODO(b/273815895) Report DUT info
+  test_run_->StartAndRegisterDutInfo(
+      std::make_unique<ocpdiag::results::DutInfo>("place", "holder"));
+
+  // TODO(b/273823746) Populate setup and check env step
+  auto setup_step =
+      std::make_unique<TestStep>("Setup and Check Environment", *test_run_);
 
   std::map<std::string, std::string> options;
 
@@ -627,6 +631,8 @@ bool Sat::Initialize() {
     valid_ = new PageEntryQueue(pages_);
     if ((empty_ == NULL) || (valid_ == NULL)) return false;
   }
+
+  setup_step.reset();
 
   if (!InitializePages()) {
     logprintf(0, "Process Error: Initialize Pages failed\n");
@@ -968,7 +974,6 @@ bool Sat::ParseArgs(int argc, const char **argv) {
     }
 
     // Default:
-    PrintVersion();
     PrintHelp();
     if (strcmp(argv[i], "-h") && strcmp(argv[i], "--help")) {
       printf("\n Unknown argument %s\n", argv[i]);
@@ -1158,13 +1163,17 @@ void Sat::InitializeThreads() {
   // Error polling thread.
   // This may detect ECC corrected errors, disk problems, or
   // any other errors normally hidden from userspace.
+  // TODO(b/274515842) Populate error polling step
   WorkerVector *error_vector = new WorkerVector();
   if (error_poll_) {
+    auto error_poll_step = std::make_unique<TestStep>(
+        "Poll for System Error Messages", *test_run_);
     ErrorPollThread *thread = new ErrorPollThread();
     thread->InitThread(total_threads_++, this, os_, patternlist_,
-                       &continuous_status_);
+                       &continuous_status_, error_poll_step.get());
 
     error_vector->insert(error_vector->end(), thread);
+    thread_test_steps_.push_back(std::move(error_poll_step));
   } else {
     logprintf(5, "Log: Skipping error poll thread due to --no_errors flag\n");
   }
@@ -1177,10 +1186,16 @@ void Sat::InitializeThreads() {
     return;
   }
 
+  // TODO(b/274512309) Populate memory copy thread step
+  std::unique_ptr<TestStep> copy_step;
+  if (memory_threads_ > 0) {
+    copy_step =
+        std::make_unique<TestStep>("Run Memory Copy Threads", *test_run_);
+  }
   for (int i = 0; i < memory_threads_; i++) {
     CopyThread *thread = new CopyThread();
     thread->InitThread(total_threads_++, this, os_, patternlist_,
-                       &power_spike_status_);
+                       &power_spike_status_, copy_step.get());
 
     if ((region_count_ > 1) && (region_mode_)) {
       int32 region = region_find(i % region_count_);
@@ -1224,13 +1239,19 @@ void Sat::InitializeThreads() {
     memory_vector->insert(memory_vector->end(), thread);
   }
   workers_map_.insert(make_pair(kMemoryType, memory_vector));
+  if (memory_threads_ > 0) thread_test_steps_.push_back(std::move(copy_step));
 
   // File IO threads.
+  std::unique_ptr<TestStep> file_io_step;
+  if (file_threads_ > 0) {
+    file_io_step =
+        std::make_unique<TestStep>("Run File IO Threads", *test_run_);
+  }
   WorkerVector *fileio_vector = new WorkerVector();
   for (int i = 0; i < file_threads_; i++) {
     FileThread *thread = new FileThread();
     thread->InitThread(total_threads_++, this, os_, patternlist_,
-                       &power_spike_status_);
+                       &power_spike_status_, file_io_step.get());
     thread->SetFile(filename_[i].c_str());
     // Set disk threads high priority. They don't take much processor time,
     // but blocking them will delay disk IO.
@@ -1239,53 +1260,86 @@ void Sat::InitializeThreads() {
     fileio_vector->insert(fileio_vector->end(), thread);
   }
   workers_map_.insert(make_pair(kFileIOType, fileio_vector));
+  if (file_threads_ > 0) thread_test_steps_.push_back(std::move(file_io_step));
 
   // Net IO threads.
-  WorkerVector *netio_vector = new WorkerVector();
+  // TODO(b/274516894) Populate net listen step
   WorkerVector *netslave_vector = new WorkerVector();
   if (listen_threads_ > 0) {
+    auto net_listen_step = std::make_unique<TestStep>(
+        "Listen for Incoming Network IO", *test_run_);
     // Create a network slave thread. This listens for connections.
     NetworkListenThread *thread = new NetworkListenThread();
     thread->InitThread(total_threads_++, this, os_, patternlist_,
-                       &continuous_status_);
+                       &continuous_status_, net_listen_step.get());
 
+    thread_test_steps_.push_back(std::move(net_listen_step));
     netslave_vector->insert(netslave_vector->end(), thread);
   }
+
+  // TODO(b/274517465) Populate net IO step
+  std::unique_ptr<TestStep> net_io_step;
+  if (net_threads_ > 0) {
+    net_io_step =
+        std::make_unique<TestStep>("Run Network IO Threads", *test_run_);
+  }
+  WorkerVector *netio_vector = new WorkerVector();
   for (int i = 0; i < net_threads_; i++) {
     NetworkThread *thread = new NetworkThread();
     thread->InitThread(total_threads_++, this, os_, patternlist_,
-                       &continuous_status_);
+                       &continuous_status_, net_io_step.get());
     thread->SetIP(ipaddrs_[i].c_str());
 
     netio_vector->insert(netio_vector->end(), thread);
   }
   workers_map_.insert(make_pair(kNetIOType, netio_vector));
   workers_map_.insert(make_pair(kNetSlaveType, netslave_vector));
+  if (net_threads_ > 0) thread_test_steps_.push_back(std::move(net_io_step));
 
   // Result check threads.
+  // TODO(b/274523022) Populate memory check step
+  std::unique_ptr<TestStep> check_step;
+  if (check_threads_ > 0) {
+    check_step = std::make_unique<TestStep>("Run Mid-Test Memory Check Threads",
+                                            *test_run_);
+  }
   WorkerVector *check_vector = new WorkerVector();
   for (int i = 0; i < check_threads_; i++) {
     CheckThread *thread = new CheckThread();
     thread->InitThread(total_threads_++, this, os_, patternlist_,
-                       &continuous_status_);
+                       &continuous_status_, check_step.get());
 
     check_vector->insert(check_vector->end(), thread);
   }
   workers_map_.insert(make_pair(kCheckType, check_vector));
+  if (check_threads_ > 0) thread_test_steps_.push_back(std::move(check_step));
 
   // Memory invert threads.
+  // TODO(b/274523085) Populate memory invert step
+  std::unique_ptr<TestStep> invert_step;
+  if (invert_threads_ > 0) {
+    invert_step =
+        std::make_unique<TestStep>("Run Memory Invert Threads", *test_run_);
+  }
   logprintf(12, "Log: Starting invert threads\n");
   WorkerVector *invert_vector = new WorkerVector();
   for (int i = 0; i < invert_threads_; i++) {
     InvertThread *thread = new InvertThread();
     thread->InitThread(total_threads_++, this, os_, patternlist_,
-                       &continuous_status_);
+                       &continuous_status_, invert_step.get());
 
     invert_vector->insert(invert_vector->end(), thread);
   }
   workers_map_.insert(make_pair(kInvertType, invert_vector));
+  if (invert_threads_ > 0) thread_test_steps_.push_back(std::move(invert_step));
 
   // Disk stress threads.
+  // TODO(b/274523023) Populate disk stress step
+  std::unique_ptr<TestStep> disk_step;
+  if (disk_threads_ > 0) {
+    disk_step =
+        std::make_unique<TestStep>("Run Disk Stress Threads", *test_run_);
+  }
   WorkerVector *disk_vector = new WorkerVector();
   WorkerVector *random_vector = new WorkerVector();
   logprintf(12, "Log: Starting disk stress threads\n");
@@ -1293,7 +1347,7 @@ void Sat::InitializeThreads() {
     // Creating write threads
     DiskThread *thread = new DiskThread(blocktables_[i]);
     thread->InitThread(total_threads_++, this, os_, patternlist_,
-                       &power_spike_status_);
+                       &power_spike_status_, disk_step.get());
     thread->SetDevice(diskfilename_[i].c_str());
     if (thread->SetParameters(read_block_size_, write_block_size_,
                               segment_size_, cache_size_, blocks_per_segment_,
@@ -1309,7 +1363,7 @@ void Sat::InitializeThreads() {
       // Creating random threads
       RandomDiskThread *rthread = new RandomDiskThread(blocktables_[i]);
       rthread->InitThread(total_threads_++, this, os_, patternlist_,
-                          &power_spike_status_);
+                          &power_spike_status_, disk_step.get());
       rthread->SetDevice(diskfilename_[i].c_str());
       if (rthread->SetParameters(read_block_size_, write_block_size_,
                                  segment_size_, cache_size_,
@@ -1325,14 +1379,21 @@ void Sat::InitializeThreads() {
 
   workers_map_.insert(make_pair(kDiskType, disk_vector));
   workers_map_.insert(make_pair(kRandomDiskType, random_vector));
+  if (disk_threads_ > 0) thread_test_steps_.push_back(std::move(disk_step));
 
   // CPU stress threads.
+  // TODO(b/274522790) Populate cpu stress step
+  std::unique_ptr<TestStep> cpu_stress_step;
+  if (cpu_stress_threads_ > 0) {
+    cpu_stress_step =
+        std::make_unique<TestStep>("Run CPU Stress Threads", *test_run_);
+  }
   WorkerVector *cpu_vector = new WorkerVector();
   logprintf(12, "Log: Starting cpu stress threads\n");
   for (int i = 0; i < cpu_stress_threads_; i++) {
     CpuStressThread *thread = new CpuStressThread();
     thread->InitThread(total_threads_++, this, os_, patternlist_,
-                       &continuous_status_);
+                       &continuous_status_, cpu_stress_step.get());
 
     // Don't restrict thread location if we have more than one
     // thread per core. Not so good for performance.
@@ -1361,9 +1422,14 @@ void Sat::InitializeThreads() {
     cpu_vector->insert(cpu_vector->end(), thread);
   }
   workers_map_.insert(make_pair(kCPUType, cpu_vector));
+  if (cpu_stress_threads_ > 0)
+    thread_test_steps_.push_back(std::move(cpu_stress_step));
 
   // CPU Cache Coherency Threads - one for each core available.
   if (cc_test_) {
+    // TODO(b/274522913) Populate CPU cache coherency step
+    auto cpu_cache_step =
+        std::make_unique<TestStep>("Run CPU Cache Coherency Test", *test_run_);
     WorkerVector *cc_vector = new WorkerVector();
     logprintf(12, "Log: Starting cpu cache coherency threads\n");
 
@@ -1416,7 +1482,7 @@ void Sat::InitializeThreads() {
           new CpuCacheCoherencyThread(cc_cacheline_data_, cc_cacheline_count_,
                                       tnum, num_cpus, cc_inc_count_);
       thread->InitThread(total_threads_++, this, os_, patternlist_,
-                         &continuous_status_);
+                         &continuous_status_, cpu_cache_step.get());
       // Pin the thread to a particular core.
       thread->set_cpu_mask_to_cpu(tnum);
 
@@ -1424,20 +1490,26 @@ void Sat::InitializeThreads() {
       cc_vector->insert(cc_vector->end(), thread);
     }
     workers_map_.insert(make_pair(kCCType, cc_vector));
+    thread_test_steps_.push_back(std::move(cpu_cache_step));
   }
 
+  // TODO(b/274523120) Populate CPU frequency test step
   if (cpu_freq_test_) {
+    auto cpu_freq_step =
+        std::make_unique<TestStep>("Run CPU Frequency Test", *test_run_);
     // Create the frequency test thread.
     logprintf(5, "Log: Running cpu frequency test: threshold set to %dMHz.\n",
               cpu_freq_threshold_);
     CpuFreqThread *thread =
         new CpuFreqThread(CpuCount(), cpu_freq_threshold_, cpu_freq_round_);
     // This thread should be paused when other threads are paused.
-    thread->InitThread(total_threads_++, this, os_, NULL, &power_spike_status_);
+    thread->InitThread(total_threads_++, this, os_, NULL, &power_spike_status_,
+                       cpu_freq_step.get());
 
     WorkerVector *cpu_freq_vector = new WorkerVector();
     cpu_freq_vector->insert(cpu_freq_vector->end(), thread);
     workers_map_.insert(make_pair(kCPUFreqType, cpu_freq_vector));
+    thread_test_steps_.push_back(std::move(cpu_freq_step));
   }
 
   ReleaseWorkerLock();
@@ -1513,6 +1585,10 @@ void Sat::JoinThreads() {
 
   QueueStats();
 
+  // TODO(b/274523022) Populate memory check tests
+  auto check_step = std::make_unique<TestStep>(
+      "Run Post-Test Memory Check Threads", *test_run_);
+
   // Finish up result checking.
   // Spawn 4 check threads to minimize check time.
   logprintf(12, "Log: Finished countdown, begin to result check\n");
@@ -1525,7 +1601,7 @@ void Sat::JoinThreads() {
     for (int i = 0; i < fill_threads_; i++) {
       CheckThread *thread = new CheckThread();
       thread->InitThread(total_threads_++, this, os_, patternlist_,
-                         &reap_check_status);
+                         &reap_check_status, check_step.get());
       logprintf(12, "Log: Finished countdown, begin to result check\n");
       reap_check_vector.push_back(thread);
     }
@@ -1810,6 +1886,10 @@ void Sat::DeleteThreads() {
   logprintf(12, "Log: Destroying WorkerStatus objects\n");
   power_spike_status_.Destroy();
   continuous_status_.Destroy();
+
+  // Delete thread test steps
+  for (std::unique_ptr<TestStep> &thread_step : thread_test_steps_)
+    thread_step.reset();
 }
 
 namespace {
