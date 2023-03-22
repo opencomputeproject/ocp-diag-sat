@@ -351,6 +351,5 @@ Pattern *PatternList::GetRandomPattern() {
     return &patterns_[i];
   }
 
-  logprintf(0, "Process Error: Out of bounds pattern access\n");
   return 0;
 }

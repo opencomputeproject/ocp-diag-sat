@@ -2,9 +2,9 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
     name = "ocp_diag_core",
-    sha256 = "294b9b47e6d8cd49cefe48bd67f48e11fd1139b362f84c64c46a2566c5d26e14",
-    strip_prefix = "ocp-diag-core-3c3ae8d0464fd45536179a1309ca957a4fcbd676/apis/c++",
-    urls = ["https://github.com/opencomputeproject/ocp-diag-core/archive/3c3ae8d0464fd45536179a1309ca957a4fcbd676.zip"],  # 2023-03-08
+    sha256 = "af3eb900688c2d11c97ef51a93003cd4725f4756ee7d5c4d5fe389f10cb11995",
+    strip_prefix = "ocp-diag-core-f47fa7b48bac87bb2848de69217163208a3f963f/apis/c++",
+    urls = ["https://github.com/opencomputeproject/ocp-diag-core/archive/f47fa7b48bac87bb2848de69217163208a3f963f.zip"],  # 2023-03-22
 )
 
 load("@ocp_diag_core//ocpdiag:build_deps.bzl", "load_deps")

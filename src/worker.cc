@@ -46,13 +46,18 @@
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
+#include "absl/strings/str_format.h"
 #include "error_diag.h"  // NOLINT
-#include "os.h"          // NOLINT
-#include "pattern.h"     // NOLINT
-#include "queue.h"       // NOLINT
-#include "sat.h"         // NOLINT
-#include "sattypes.h"    // NOLINT
-#include "worker.h"      // NOLINT
+#include "ocpdiag/core/results/data_model/input_model.h"
+#include "os.h"        // NOLINT
+#include "pattern.h"   // NOLINT
+#include "queue.h"     // NOLINT
+#include "sat.h"       // NOLINT
+#include "sattypes.h"  // NOLINT
+#include "worker.h"    // NOLINT
+
+using ::ocpdiag::results::Log;
+using ::ocpdiag::results::LogSeverity;
 
 // Syscalls
 // Why ubuntu, do you hate gettid so bad?
@@ -440,7 +445,9 @@ bool WorkerThread::YieldSelf() { return (sched_yield() == 0); }
 bool WorkerThread::FillPage(struct page_entry *pe) {
   // Error check arguments.
   if (pe == 0) {
-    logprintf(0, "Process Error: Fill Page entry null\n");
+    test_step_->AddLog(
+        {.severity = LogSeverity::kError,
+         .message = "Attempted to fill a memory page with a null page entry"});
     return 0;
   }
 
@@ -488,11 +495,14 @@ void FillThread::SetFillPages(int64 num_pages_to_fill_init) {
 bool FillThread::FillPageRandom(struct page_entry *pe) {
   // Error check arguments.
   if (pe == 0) {
-    logprintf(0, "Process Error: Fill Page entry null\n");
+    test_step_->AddLog({.severity = LogSeverity::kError,
+                        .message = "Attempted to fill a null page entry"});
     return 0;
   }
   if ((patternlist_ == 0) || (patternlist_->Size() == 0)) {
-    logprintf(0, "Process Error: No data patterns available\n");
+    test_step_->AddLog(
+        {.severity = LogSeverity::kError,
+         .message = "No data patterns available when filling memory pages"});
     return 0;
   }
 
@@ -501,7 +511,10 @@ bool FillThread::FillPageRandom(struct page_entry *pe) {
   pe->lastcpu = sched_getcpu();
 
   if (pe->pattern == 0) {
-    logprintf(0, "Process Error: Null data pattern\n");
+    test_step_->AddLog(
+        {.severity = LogSeverity::kError,
+         .message =
+             "Attempted to fill a memory page with a null memory pattern"});
     return 0;
   }
 
@@ -512,8 +525,9 @@ bool FillThread::FillPageRandom(struct page_entry *pe) {
 // Memory fill work loop. Execute until alloted pages filled.
 bool FillThread::Work() {
   bool result = true;
-
-  logprintf(9, "Log: Starting fill thread %d\n", thread_num_);
+  test_step_->AddLog({.severity = LogSeverity::kDebug,
+                      .message = absl::StrFormat(
+                          "Starting memory page fill thread %d", thread_num_)});
 
   // We want to fill num_pages_to_fill pages, and
   // stop when we've filled that many.
@@ -523,9 +537,11 @@ bool FillThread::Work() {
   while (IsReadyToRun() && (loops < num_pages_to_fill_)) {
     result = result && sat_->GetEmpty(&pe);
     if (!result) {
-      logprintf(0,
-                "Process Error: fill_thread failed to pop pages, "
-                "bailing\n");
+      test_step_->AddLog(
+          {.severity = LogSeverity::kError,
+           .message = absl::StrFormat(
+               "Fill thread %d failed to pop pages, exiting thread",
+               thread_num_)});
       break;
     }
 
@@ -536,9 +552,11 @@ bool FillThread::Work() {
     // Put the page back on the queue.
     result = result && sat_->PutValid(&pe);
     if (!result) {
-      logprintf(0,
-                "Process Error: fill_thread failed to push pages, "
-                "bailing\n");
+      test_step_->AddLog(
+          {.severity = LogSeverity::kError,
+           .message = absl::StrFormat(
+               "Fill thread %d failed to push pages, exiting thread",
+               thread_num_)});
       break;
     }
     loops++;
@@ -547,8 +565,11 @@ bool FillThread::Work() {
   // Fill in thread status.
   pages_copied_ = loops;
   status_ = result;
-  logprintf(9, "Log: Completed %d: Fill thread. Status %d, %d pages filled\n",
-            thread_num_, status_, pages_copied_);
+  test_step_->AddLog(
+      {.severity = LogSeverity::kDebug,
+       .message = absl::StrFormat(
+           "Memory page fill thread %d completed. Status: %d. Filled %d pages.",
+           thread_num_, status_, pages_copied_)});
   return result;
 }
 
