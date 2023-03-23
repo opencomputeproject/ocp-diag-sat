@@ -1,30 +1,23 @@
-// Copyright 2008 Google Inc. All Rights Reserved.
-
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//      http://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
 
 // Interface for a thread-safe container of disk blocks
 
 #ifndef STRESSAPPTEST_DISK_BLOCKS_H_
 #define STRESSAPPTEST_DISK_BLOCKS_H_
 
-#include <sys/types.h>
-#include <pthread.h>
-#include <time.h>
-#include <sys/time.h>
 #include <errno.h>
+#include <pthread.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <time.h>
+
 #include <map>
-#include <vector>
 #include <string>
+#include <vector>
 
 #include "sattypes.h"
 
@@ -59,10 +52,11 @@ class BlockData {
   uint64 size() const { return size_; }
   void set_pattern(Pattern *p) { pattern_ = p; }
   Pattern *pattern() { return pattern_; }
+
  private:
-  uint64 address_;  // Address of first sector in block
-  uint64 size_;  // Size of block
-  int references_;  // Reference counter
+  uint64 address_;    // Address of first sector in block
+  uint64 size_;       // Size of block
+  int references_;    // Reference counter
   bool initialized_;  // Flag indicating the block was written on disk
   Pattern *pattern_;
   mutable pthread_mutex_t data_mutex_;
@@ -83,9 +77,8 @@ class DiskBlockTable {
   // Sets all initial parameters. Assumes all existent data is
   // invalid and, therefore, must be removed.
   void SetParameters(int sector_size, int write_block_size,
-                     int64 device_sectors,
-                     int64 segment_size,
-                     const string& device_name);
+                     int64 device_sectors, int64 segment_size,
+                     const string &device_name);
 
   // During the regular execution, there will be 2 types of threads:
   // - Write thread:  gets a large number of blocks using GetUnusedBlock,
@@ -131,7 +124,7 @@ class DiskBlockTable {
     BlockData *block;
     int pos;
   };
-  typedef map<int64, StorageData*> AddrToBlockMap;
+  typedef map<int64, StorageData *> AddrToBlockMap;
   typedef vector<int64> PosToAddrVector;
 
   // Inserts block in structure, used in tests and by other methods.
@@ -142,12 +135,12 @@ class DiskBlockTable {
   virtual int64 Random64();
 
   // Accessor methods for testing.
-  const PosToAddrVector& pos_to_addr() const { return pos_to_addr_; }
-  const AddrToBlockMap& addr_to_block() const { return addr_to_block_; }
+  const PosToAddrVector &pos_to_addr() const { return pos_to_addr_; }
+  const AddrToBlockMap &addr_to_block() const { return addr_to_block_; }
 
   int sector_size() const { return sector_size_; }
   int write_block_size() const { return write_block_size_; }
-  const string& device_name() const { return device_name_; }
+  const string &device_name() const { return device_name_; }
   int64 device_sectors() const { return device_sectors_; }
   int64 segment_size() const { return segment_size_; }
 
@@ -159,12 +152,12 @@ class DiskBlockTable {
   AddrToBlockMap addr_to_block_;
 
   // Configuration parameters for block selection
-  int sector_size_;  // Sector size, in bytes
+  int sector_size_;       // Sector size, in bytes
   int write_block_size_;  // Block size, in bytes
-  string device_name_;  // Device name
+  string device_name_;    // Device name
   int64 device_sectors_;  // Number of sectors in device
-  int64 segment_size_;  // Segment size in bytes
-  uint64 size_;  // Number of elements on table
+  int64 segment_size_;    // Segment size in bytes
+  uint64 size_;           // Number of elements on table
   pthread_mutex_t data_mutex_;
   pthread_cond_t data_condition_;
   pthread_mutex_t parameter_mutex_;

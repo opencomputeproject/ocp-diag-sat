@@ -1,16 +1,8 @@
-// Copyright 2006 Google Inc. All Rights Reserved.
-
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//      http://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
 
 // worker.h : worker thread interface
 
@@ -22,7 +14,6 @@
 #define STRESSAPPTEST_WORKER_H_
 
 #include <pthread.h>
-
 #include <sys/time.h>
 #include <sys/types.h>
 
@@ -40,7 +31,6 @@
 #include "disk_blocks.h"
 #include "queue.h"
 #include "sattypes.h"
-
 
 // Global Datastruture shared by the Cache Coherency Worker Threads.
 struct cc_cacheline_data {
@@ -141,8 +131,7 @@ class WorkerStatus {
 #ifdef HAVE_PTHREAD_BARRIERS
     pthread_rwlock_rdlock(&pause_rwlock_);
     int error = pthread_barrier_wait(&pause_barrier_);
-    if (error != PTHREAD_BARRIER_SERIAL_THREAD)
-      sat_assert(error == 0);
+    if (error != PTHREAD_BARRIER_SERIAL_THREAD) sat_assert(error == 0);
     pthread_rwlock_unlock(&pause_rwlock_);
 #endif
   }
@@ -197,7 +186,6 @@ class WorkerStatus {
   DISALLOW_COPY_AND_ASSIGN(WorkerStatus);
 };
 
-
 // This is a base class for worker threads.
 // Each thread repeats a specific
 // task on various blocks of memory.
@@ -213,8 +201,7 @@ class WorkerThread {
   virtual ~WorkerThread();
 
   // Initialize values and thread ID number.
-  virtual void InitThread(int thread_num_init,
-                          class Sat *sat_init,
+  virtual void InitThread(int thread_num_init, class Sat *sat_init,
                           class OsLayer *os_init,
                           class PatternList *patternlist_init,
                           WorkerStatus *worker_status);
@@ -237,7 +224,7 @@ class WorkerThread {
   virtual bool Work();
 
   // Starts per-WorkerThread timer.
-  void StartThreadTimer() {start_time_ = sat_get_time_us();}
+  void StartThreadTimer() { start_time_ = sat_get_time_us(); }
   // Reads current timer value and returns run duration without recording it.
   int64 ReadThreadTimer() {
     int64 end_time_ = sat_get_time_us();
@@ -246,28 +233,26 @@ class WorkerThread {
   // Stops per-WorkerThread timer and records thread run duration.
   // Start/Stop ThreadTimer repetitively has cumulative effect, ie the timer
   // is effectively paused and restarted, so runduration_usec accumulates on.
-  void StopThreadTimer() {
-    runduration_usec_ += ReadThreadTimer();
-  }
+  void StopThreadTimer() { runduration_usec_ += ReadThreadTimer(); }
 
   // Acccess member variables.
-  bool GetStatus() {return status_;}
-  int64 GetErrorCount() {return errorcount_;}
-  int64 GetPageCount() {return pages_copied_;}
-  int64 GetRunDurationUSec() {return runduration_usec_;}
+  bool GetStatus() { return status_; }
+  int64 GetErrorCount() { return errorcount_; }
+  int64 GetPageCount() { return pages_copied_; }
+  int64 GetRunDurationUSec() { return runduration_usec_; }
 
   // Returns bandwidth defined as pages_copied / thread_run_durations.
   virtual float GetCopiedData();
   // Calculate worker thread specific copied data.
-  virtual float GetMemoryCopiedData() {return 0;}
-  virtual float GetDeviceCopiedData() {return 0;}
+  virtual float GetMemoryCopiedData() { return 0; }
+  virtual float GetDeviceCopiedData() { return 0; }
   // Calculate worker thread specific bandwidth.
-  virtual float GetMemoryBandwidth()
-    {return GetMemoryCopiedData() / (
-        runduration_usec_ * 1.0 / 1000000.);}
-  virtual float GetDeviceBandwidth()
-    {return GetDeviceCopiedData() / (
-        runduration_usec_ * 1.0 / 1000000.);}
+  virtual float GetMemoryBandwidth() {
+    return GetMemoryCopiedData() / (runduration_usec_ * 1.0 / 1000000.);
+  }
+  virtual float GetDeviceBandwidth() {
+    return GetDeviceCopiedData() / (runduration_usec_ * 1.0 / 1000000.);
+  }
 
   void set_cpu_mask(cpu_set_t *mask) {
     memcpy(&cpu_mask_, mask, sizeof(*mask));
@@ -277,7 +262,7 @@ class WorkerThread {
     cpuset_set_ab(&cpu_mask_, cpu_num, cpu_num + 1);
   }
 
-  void set_tag(int32 tag) {tag_ = tag;}
+  void set_tag(int32 tag) { tag_ = tag; }
 
   // Returns CPU mask, where each bit represents a logical cpu.
   bool AvailableCpus(cpu_set_t *cpuset);
@@ -290,7 +275,7 @@ class WorkerThread {
     return cpuset_format(&current_cpus);
   }
 
-  int ThreadID() {return thread_num_;}
+  int ThreadID() { return thread_num_; }
 
   // Bind worker thread to specified CPU(s)
   bool BindToCpus(const cpu_set_t *cpuset);
@@ -313,24 +298,18 @@ class WorkerThread {
 
   // These are functions used by the various work loops.
   // Pretty print and log a data miscompare.
-  virtual void ProcessError(struct ErrorRecord *er,
-                            int priority,
+  virtual void ProcessError(struct ErrorRecord *er, int priority,
                             const char *message);
 
   // Compare a region of memory with a known data patter, and report errors.
-  virtual int CheckRegion(void *addr,
-                          class Pattern *pat,
-                          uint32 lastcpu,
-                          int64 length,
-                          int offset,
-                          int64 patternoffset);
+  virtual int CheckRegion(void *addr, class Pattern *pat, uint32 lastcpu,
+                          int64 length, int offset, int64 patternoffset);
 
   // Fast compare a block of memory.
   virtual int CrcCheckPage(struct page_entry *srcpe);
 
   // Fast copy a block of memory, while verifying correctness.
-  virtual int CrcCopyPage(struct page_entry *dstpe,
-                          struct page_entry *srcpe);
+  virtual int CrcCopyPage(struct page_entry *dstpe, struct page_entry *srcpe);
 
   // Fast copy a block of memory, while verifying correctness, and heating CPU.
   virtual int CrcWarmCopyPage(struct page_entry *dstpe,
@@ -340,48 +319,39 @@ class WorkerThread {
   virtual bool FillPage(struct page_entry *pe);
 
   // Copy with address tagging.
-  virtual bool AdlerAddrMemcpyC(uint64 *dstmem64,
-                                uint64 *srcmem64,
+  virtual bool AdlerAddrMemcpyC(uint64 *dstmem64, uint64 *srcmem64,
                                 unsigned int size_in_bytes,
-                                AdlerChecksum *checksum,
-                                struct page_entry *pe);
+                                AdlerChecksum *checksum, struct page_entry *pe);
   // SSE copy with address tagging.
-  virtual bool AdlerAddrMemcpyWarm(uint64 *dstmem64,
-                                   uint64 *srcmem64,
+  virtual bool AdlerAddrMemcpyWarm(uint64 *dstmem64, uint64 *srcmem64,
                                    unsigned int size_in_bytes,
                                    AdlerChecksum *checksum,
                                    struct page_entry *pe);
   // Crc data with address tagging.
-  virtual bool AdlerAddrCrcC(uint64 *srcmem64,
-                             unsigned int size_in_bytes,
-                             AdlerChecksum *checksum,
-                             struct page_entry *pe);
+  virtual bool AdlerAddrCrcC(uint64 *srcmem64, unsigned int size_in_bytes,
+                             AdlerChecksum *checksum, struct page_entry *pe);
   // Setup tagging on an existing page.
-  virtual bool TagAddrC(uint64 *memwords,
-                        unsigned int size_in_bytes);
+  virtual bool TagAddrC(uint64 *memwords, unsigned int size_in_bytes);
   // Report a mistagged cacheline.
-  virtual bool ReportTagError(uint64 *mem64,
-                      uint64 actual,
-                      uint64 tag);
+  virtual bool ReportTagError(uint64 *mem64, uint64 actual, uint64 tag);
   // Print out the error record of the tag mismatch.
-  virtual void ProcessTagError(struct ErrorRecord *error,
-                       int priority,
-                       const char *message);
+  virtual void ProcessTagError(struct ErrorRecord *error, int priority,
+                               const char *message);
 
   // A worker thread can yield itself to give up CPU until it's scheduled again
   bool YieldSelf();
 
  protected:
   // General state variables that all subclasses need.
-  int thread_num_;                  // Thread ID.
-  volatile bool status_;            // Error status.
-  volatile int64 pages_copied_;     // Recorded for memory bandwidth calc.
-  volatile int64 errorcount_;       // Miscompares seen by this thread.
+  int thread_num_;               // Thread ID.
+  volatile bool status_;         // Error status.
+  volatile int64 pages_copied_;  // Recorded for memory bandwidth calc.
+  volatile int64 errorcount_;    // Miscompares seen by this thread.
 
-  cpu_set_t cpu_mask_;              // Cores this thread is allowed to run on.
-  volatile uint32 tag_;             // Tag hint for memory this thread can use.
+  cpu_set_t cpu_mask_;   // Cores this thread is allowed to run on.
+  volatile uint32 tag_;  // Tag hint for memory this thread can use.
 
-  bool tag_mode_;                   // Tag cachelines with vaddr.
+  bool tag_mode_;  // Tag cachelines with vaddr.
 
   // Thread timing variables.
   int64 start_time_;                 // Worker thread start time.
@@ -414,24 +384,22 @@ class FileThread : public WorkerThread {
   virtual bool Work();
 
   // Calculate worker thread specific bandwidth.
-  virtual float GetDeviceCopiedData()
-    {return GetCopiedData()*2;}
+  virtual float GetDeviceCopiedData() { return GetCopiedData() * 2; }
   virtual float GetMemoryCopiedData();
 
  protected:
   // Record of where these pages were sourced from, and what
   // potentially broken components they passed through.
   struct PageRec {
-     class Pattern *pattern;  // This is the data it should contain.
-     void *src;  // This is the memory location the data was sourced from.
-     void *dst;  // This is where it ended up.
+    class Pattern *pattern;  // This is the data it should contain.
+    void *src;  // This is the memory location the data was sourced from.
+    void *dst;  // This is where it ended up.
   };
 
   // These are functions used by the various work loops.
   // Pretty print and log a data miscompare. Disks require
   // slightly different error handling.
-  virtual void ProcessError(struct ErrorRecord *er,
-                            int priority,
+  virtual void ProcessError(struct ErrorRecord *er, int priority,
                             const char *message);
 
   virtual bool OpenFile(int *pfile);
@@ -448,8 +416,7 @@ class FileThread : public WorkerThread {
   // Sector tagging support.
   virtual bool SectorTagPage(struct page_entry *src, int block);
   virtual bool SectorValidatePage(const struct PageRec &page,
-                                  struct page_entry *dst,
-                                  int block);
+                                  struct page_entry *dst, int block);
 
   // Get memory for an incoming data transfer..
   virtual bool PagePrepare();
@@ -465,15 +432,14 @@ class FileThread : public WorkerThread {
   // Throw out a used, filled page.
   virtual bool PutValidPage(struct page_entry *src);
 
+  struct PageRec *page_recs_;  // Array of page records.
+  int crc_page_;               // Page currently being CRC checked.
+  string filename_;            // Name of file to access.
+  string devicename_;          // Name of device file is on.
 
-  struct PageRec *page_recs_;          // Array of page records.
-  int crc_page_;                        // Page currently being CRC checked.
-  string filename_;                     // Name of file to access.
-  string devicename_;                   // Name of device file is on.
-
-  bool page_io_;                        // Use page pool for IO.
-  void *local_page_;                   // malloc'd page fon non-pool IO.
-  int pass_;                            // Number of writes to the file so far.
+  bool page_io_;      // Use page pool for IO.
+  void *local_page_;  // malloc'd page fon non-pool IO.
+  int pass_;          // Number of writes to the file so far.
 
   // Tag to detect file corruption.
   struct SectorTag {
@@ -481,12 +447,11 @@ class FileThread : public WorkerThread {
     volatile uint8 block;
     volatile uint8 sector;
     volatile uint8 pass;
-    char pad[512-4];
+    char pad[512 - 4];
   };
 
   DISALLOW_COPY_AND_ASSIGN(FileThread);
 };
-
 
 // Worker thread to perform Network IO.
 class NetworkThread : public WorkerThread {
@@ -497,8 +462,7 @@ class NetworkThread : public WorkerThread {
   virtual bool Work();
 
   // Calculate worker thread specific bandwidth.
-  virtual float GetDeviceCopiedData()
-    {return GetCopiedData()*2;}
+  virtual float GetDeviceCopiedData() { return GetCopiedData() * 2; }
 
  protected:
   // IsReadyToRunNoPause() wrapper, for NetworkSlaveThread to override.
@@ -548,7 +512,7 @@ class NetworkListenThread : public NetworkThread {
     WorkerStatus status;
     NetworkSlaveThread thread;
   };
-  typedef vector<ChildWorker*> ChildVector;
+  typedef vector<ChildWorker *> ChildVector;
   ChildVector child_workers_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkListenThread);
@@ -560,8 +524,7 @@ class CopyThread : public WorkerThread {
   CopyThread() {}
   virtual bool Work();
   // Calculate worker thread specific bandwidth.
-  virtual float GetMemoryCopiedData()
-    {return GetCopiedData()*2;}
+  virtual float GetMemoryCopiedData() { return GetCopiedData() * 2; }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CopyThread);
@@ -573,8 +536,7 @@ class InvertThread : public WorkerThread {
   InvertThread() {}
   virtual bool Work();
   // Calculate worker thread specific bandwidth.
-  virtual float GetMemoryCopiedData()
-    {return GetCopiedData()*4;}
+  virtual float GetMemoryCopiedData() { return GetCopiedData() * 4; }
 
  private:
   virtual int InvertPageUp(struct page_entry *srcpe);
@@ -605,13 +567,11 @@ class CheckThread : public WorkerThread {
   CheckThread() {}
   virtual bool Work();
   // Calculate worker thread specific bandwidth.
-  virtual float GetMemoryCopiedData()
-    {return GetCopiedData();}
+  virtual float GetMemoryCopiedData() { return GetCopiedData(); }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CheckThread);
 };
-
 
 // Worker thread to poll for system error messages.
 // Thread will check for messages until "done" flag is set.
@@ -638,10 +598,8 @@ class CpuStressThread : public WorkerThread {
 // CPU Cache Coherency Protocol.
 class CpuCacheCoherencyThread : public WorkerThread {
  public:
-  CpuCacheCoherencyThread(cc_cacheline_data *cc_data,
-                          int cc_cacheline_count_,
-                          int cc_thread_num_,
-                          int cc_thread_count_,
+  CpuCacheCoherencyThread(cc_cacheline_data *cc_data, int cc_cacheline_count_,
+                          int cc_thread_num_, int cc_thread_count_,
                           int cc_inc_count_);
   virtual bool Work();
 
@@ -655,7 +613,7 @@ class CpuCacheCoherencyThread : public WorkerThread {
   static uint64 SimpleRandom(uint64 seed);
 
   cc_cacheline_data *cc_cacheline_data_;  // Datstructure for each cacheline.
-  int cc_local_num_;        // Local counter for each thread.
+  int cc_local_num_;                      // Local counter for each thread.
   int cc_cacheline_count_;  // Number of cache lines to operate on.
   int cc_thread_num_;       // The integer id of the thread which is
                             // used as an index into the integer array
@@ -676,23 +634,21 @@ class DiskThread : public WorkerThread {
   // Calculate disk thread specific bandwidth.
   virtual float GetDeviceCopiedData() {
     return (blocks_written_ * write_block_size_ +
-            blocks_read_ * read_block_size_) / kMegabyte;}
+            blocks_read_ * read_block_size_) /
+           kMegabyte;
+  }
 
   // Set filename for device file (in /dev).
   virtual void SetDevice(const char *device_name);
   // Set various parameters that control the behaviour of the test.
-  virtual bool SetParameters(int read_block_size,
-                             int write_block_size,
-                             int64 segment_size,
-                             int64 cache_size,
-                             int blocks_per_segment,
-                             int64 read_threshold,
-                             int64 write_threshold,
-                             int non_destructive);
+  virtual bool SetParameters(int read_block_size, int write_block_size,
+                             int64 segment_size, int64 cache_size,
+                             int blocks_per_segment, int64 read_threshold,
+                             int64 write_threshold, int non_destructive);
 
   virtual bool Work();
 
-  virtual float GetMemoryCopiedData() {return 0;}
+  virtual float GetMemoryCopiedData() { return 0; }
 
  protected:
   static const int kSectorSize = 512;       // Size of sector on disk.
@@ -701,10 +657,7 @@ class DiskThread : public WorkerThread {
   static const int kBlockRetry = 100;       // Number of retries to allocate
                                             // sectors.
 
-  enum IoOp {
-    ASYNC_IO_READ   = 0,
-    ASYNC_IO_WRITE  = 1
-  };
+  enum IoOp { ASYNC_IO_READ = 0, ASYNC_IO_WRITE = 1 };
 
   virtual bool OpenDevice(int *pfile);
   virtual bool CloseDevice(int fd);
@@ -716,8 +669,8 @@ class DiskThread : public WorkerThread {
   virtual int64 GetTime();
 
   // Do an asynchronous disk I/O operation.
-  virtual bool AsyncDiskIO(IoOp op, int fd, void *buf, int64 size,
-                           int64 offset, int64 timeout);
+  virtual bool AsyncDiskIO(IoOp op, int fd, void *buf, int64 size, int64 offset,
+                           int64 timeout);
 
   // Write a block to disk.
   virtual bool WriteBlockToDisk(int fd, BlockData *block);
@@ -728,46 +681,46 @@ class DiskThread : public WorkerThread {
   // Main work loop.
   virtual bool DoWork(int fd);
 
-  int read_block_size_;       // Size of blocks read from disk, in bytes.
-  int write_block_size_;      // Size of blocks written to disk, in bytes.
-  int64 blocks_read_;         // Number of blocks read in work loop.
-  int64 blocks_written_;      // Number of blocks written in work loop.
-  int64 segment_size_;        // Size of disk segments (in bytes) that the disk
-                              // will be split into where testing can be
-                              // confined to a particular segment.
-                              // Allows for control of how evenly the disk will
-                              // be tested.  Smaller segments imply more even
-                              // testing (less random).
-  int blocks_per_segment_;    // Number of blocks that will be tested per
-                              // segment.
-  int cache_size_;            // Size of disk cache, in bytes.
-  int queue_size_;            // Length of in-flight-blocks queue, in blocks.
-  int non_destructive_;       // Use non-destructive mode or not.
-  int update_block_table_;    // If true, assume this is the thread
-                              // responsible for writing the data in the disk
-                              // for this block device and, therefore,
-                              // update the block table. If false, just use
-                              // the block table to get data.
+  int read_block_size_;     // Size of blocks read from disk, in bytes.
+  int write_block_size_;    // Size of blocks written to disk, in bytes.
+  int64 blocks_read_;       // Number of blocks read in work loop.
+  int64 blocks_written_;    // Number of blocks written in work loop.
+  int64 segment_size_;      // Size of disk segments (in bytes) that the disk
+                            // will be split into where testing can be
+                            // confined to a particular segment.
+                            // Allows for control of how evenly the disk will
+                            // be tested.  Smaller segments imply more even
+                            // testing (less random).
+  int blocks_per_segment_;  // Number of blocks that will be tested per
+                            // segment.
+  int cache_size_;          // Size of disk cache, in bytes.
+  int queue_size_;          // Length of in-flight-blocks queue, in blocks.
+  int non_destructive_;     // Use non-destructive mode or not.
+  int update_block_table_;  // If true, assume this is the thread
+                            // responsible for writing the data in the disk
+                            // for this block device and, therefore,
+                            // update the block table. If false, just use
+                            // the block table to get data.
 
   // read/write times threshold for reporting a problem
-  int64 read_threshold_;      // Maximum time a read should take (in us) before
-                              // a warning is given.
-  int64 write_threshold_;     // Maximum time a write should take (in us) before
-                              // a warning is given.
-  int64 read_timeout_;        // Maximum time a read can take before a timeout
-                              // and the aborting of the read operation.
-  int64 write_timeout_;       // Maximum time a write can take before a timeout
-                              // and the aborting of the write operation.
+  int64 read_threshold_;   // Maximum time a read should take (in us) before
+                           // a warning is given.
+  int64 write_threshold_;  // Maximum time a write should take (in us) before
+                           // a warning is given.
+  int64 read_timeout_;     // Maximum time a read can take before a timeout
+                           // and the aborting of the read operation.
+  int64 write_timeout_;    // Maximum time a write can take before a timeout
+                           // and the aborting of the write operation.
 
-  string device_name_;        // Name of device file to access.
-  int64 device_sectors_;      // Number of sectors on the device.
+  string device_name_;    // Name of device file to access.
+  int64 device_sectors_;  // Number of sectors on the device.
 
-  std::queue<BlockData*> in_flight_sectors_;   // Queue of sectors written but
-                                                // not verified.
-  void *block_buffer_;        // Pointer to aligned block buffer.
+  std::queue<BlockData *> in_flight_sectors_;  // Queue of sectors written but
+                                               // not verified.
+  void *block_buffer_;  // Pointer to aligned block buffer.
 
 #ifdef HAVE_LIBAIO_H
-  io_context_t aio_ctx_;     // Asynchronous I/O context for Linux native AIO.
+  io_context_t aio_ctx_;  // Asynchronous I/O context for Linux native AIO.
 #endif
 
   DiskBlockTable *block_table_;  // Disk Block Table, shared by all disk
@@ -783,6 +736,7 @@ class RandomDiskThread : public DiskThread {
   virtual ~RandomDiskThread();
   // Main work loop.
   virtual bool DoWork(int fd);
+
  protected:
   DISALLOW_COPY_AND_ASSIGN(RandomDiskThread);
 };
@@ -797,13 +751,9 @@ class MemoryRegionThread : public WorkerThread {
                     const char *message);
   bool SetRegion(void *region, int64 size);
   // Calculate worker thread specific bandwidth.
-  virtual float GetMemoryCopiedData()
-    {return GetCopiedData();}
-  virtual float GetDeviceCopiedData()
-    {return GetCopiedData() * 2;}
-  void SetIdentifier(string identifier) {
-    identifier_ = identifier;
-  }
+  virtual float GetMemoryCopiedData() { return GetCopiedData(); }
+  virtual float GetDeviceCopiedData() { return GetCopiedData() * 2; }
+  void SetIdentifier(string identifier) { identifier_ = identifier; }
 
  protected:
   // Page queue for this particular memory region.
@@ -845,15 +795,15 @@ class CpuFreqThread : public WorkerThread {
 
   // The index values into the CpuDataType.msr[] array.
   enum MsrValues {
-    kMsrTsc = 0,           // MSR index 0 = TSC.
-    kMsrAperf = 1,         // MSR index 1 = APERF.
-    kMsrMperf = 2,         // MSR index 2 = MPERF.
-    kMsrLast,              // Last MSR index.
+    kMsrTsc = 0,    // MSR index 0 = TSC.
+    kMsrAperf = 1,  // MSR index 1 = APERF.
+    kMsrMperf = 2,  // MSR index 2 = MPERF.
+    kMsrLast,       // Last MSR index.
   };
 
   typedef struct {
-    uint32 msr;         // The address of the MSR.
-    const char *name;   // A human readable string for the MSR.
+    uint32 msr;        // The address of the MSR.
+    const char *name;  // A human readable string for the MSR.
   } CpuRegisterType;
 
   typedef struct {

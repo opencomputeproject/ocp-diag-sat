@@ -1,5 +1,12 @@
-/* src/stressapptest_config.h.  Generated from stressapptest_config.h.in by configure.  */
-/* src/stressapptest_config.h.in.  Generated from configure.ac by autoheader.  */
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+/* src/stressapptest_config.h.  Generated from stressapptest_config.h.in by
+ * configure.  */
+/* src/stressapptest_config.h.in.  Generated from configure.ac by autoheader. */
 
 /* Define to 1 if the `closedir' function returns void instead of `int'. */
 /* #undef CLOSEDIR_VOID */
@@ -12,7 +19,7 @@
 #define HAVE_DECL_STRERROR_R 1
 
 /* Define to 1 if you have the <dirent.h> header file, and it defines `DIR'.
-   */
+ */
 #define HAVE_DIRENT_H 1
 
 /* Define to 1 if you don't have `vprintf' but do have `_doprnt.' */
@@ -97,14 +104,14 @@
 #define HAVE_STRTOULL 1
 
 /* Define to 1 if you have the <sys/dir.h> header file, and it defines `DIR'.
-   */
+ */
 /* #undef HAVE_SYS_DIR_H */
 
 /* Define to 1 if you have the <sys/ioctl.h> header file. */
 #define HAVE_SYS_IOCTL_H 1
 
 /* Define to 1 if you have the <sys/ndir.h> header file, and it defines `DIR'.
-   */
+ */
 /* #undef HAVE_SYS_NDIR_H */
 
 /* Define to 1 if you have the <sys/select.h> header file. */
@@ -201,7 +208,8 @@
 #define STRESSAPPTEST_OS_LINUX /**/
 
 /* Timestamp when ./configure was executed */
-#define STRESSAPPTEST_TIMESTAMP "dthawkes @ dthawkes.c.googlers.com on Fri Feb  3 00:36:59 UTC 2023"
+#define STRESSAPPTEST_TIMESTAMP \
+  "dthawkes @ dthawkes.c.googlers.com on Fri Feb  3 00:36:59 UTC 2023"
 
 /* Define to 1 if you can safely include both <sys/time.h> and <time.h>. */
 #define TIME_WITH_SYS_TIME 1
@@ -231,8 +239,8 @@
    previous line.  Perhaps some future version of Sun C++ will work with
    restrict; if so, hopefully it defines __RESTRICT like Sun C does.  */
 #if defined __SUNPRO_CC && !defined __RESTRICT
-# define _Restrict
-# define __restrict__
+#define _Restrict
+#define __restrict__
 #endif
 
 /* Define to `unsigned int' if <sys/types.h> does not define. */

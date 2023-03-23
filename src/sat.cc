@@ -1,16 +1,8 @@
-// Copyright 2006 Google Inc. All Rights Reserved.
-
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//      http://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
 
 // sat.cc : a stress test for stressful testing
 
@@ -27,10 +19,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-
 #include <sys/stat.h>
 #include <sys/times.h>
+#include <unistd.h>
 
 // #define __USE_GNU
 // #define __USE_LARGEFILE64
@@ -50,27 +41,25 @@
 
 // stressapptest versioning here.
 #ifndef PACKAGE_VERSION
-static const char* kVersion = "1.0.0";
+static const char *kVersion = "1.0.0";
 #else
-static const char* kVersion = PACKAGE_VERSION;
+static const char *kVersion = PACKAGE_VERSION;
 #endif
 
 // Global stressapptest reference, for use by signal handler.
 // This makes Sat objects not safe for multiple instances.
 namespace {
-  Sat *g_sat = NULL;
+Sat *g_sat = NULL;
 
-  // Signal handler for catching break or kill.
-  //
-  // This must be installed after g_sat is assigned and while there is a single
-  // thread.
-  //
-  // This must be uninstalled while there is only a single thread, and of course
-  // before g_sat is cleared or deleted.
-  void SatHandleBreak(int signal) {
-    g_sat->Break();
-  }
-}
+// Signal handler for catching break or kill.
+//
+// This must be installed after g_sat is assigned and while there is a single
+// thread.
+//
+// This must be uninstalled while there is only a single thread, and of course
+// before g_sat is cleared or deleted.
+void SatHandleBreak(int signal) { g_sat->Break(); }
+}  // namespace
 
 // Opens the logfile for writing if necessary
 bool Sat::InitializeLogfile() {
@@ -84,19 +73,17 @@ bool Sat::InitializeLogfile() {
 #elif defined(O_FSYNC)
                     O_FSYNC |
 #endif
-                    O_WRONLY | O_CREAT,
+                        O_WRONLY | O_CREAT,
                     S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (logfile_ < 0) {
-      printf("Fatal Error: cannot open file %s for logging\n",
-             logfilename_);
+      printf("Fatal Error: cannot open file %s for logging\n", logfilename_);
       bad_status();
       return false;
     }
     // We seek to the end once instead of opening in append mode because no
     // other processes should be writing to it while this one exists.
     if (lseek(logfile_, 0, SEEK_END) == -1) {
-      printf("Fatal Error: cannot seek to end of logfile (%s)\n",
-             logfilename_);
+      printf("Fatal Error: cannot seek to end of logfile (%s)\n", logfilename_);
       bad_status();
       return false;
     }
@@ -112,33 +99,38 @@ bool Sat::CheckEnvironment() {
   // enough performance to stress the system.
 #if !defined NDEBUG
   if (run_on_anything_) {
-    logprintf(1, "Log: Running DEBUG version of SAT, "
-                 "with significantly reduced coverage.\n");
+    logprintf(1,
+              "Log: Running DEBUG version of SAT, "
+              "with significantly reduced coverage.\n");
   } else {
-    logprintf(0, "Process Error: Running DEBUG version of SAT, "
-                 "with significantly reduced coverage.\n");
+    logprintf(0,
+              "Process Error: Running DEBUG version of SAT, "
+              "with significantly reduced coverage.\n");
     logprintf(0, "Log: Command line option '-A' bypasses this error.\n");
     bad_status();
     return false;
   }
 #elif !defined CHECKOPTS
-  #error Build system regression - COPTS disregarded.
+#error Build system regression - COPTS disregarded.
 #endif
 
   // Check if the cpu frequency test is enabled and able to run.
   if (cpu_freq_test_) {
     if (!CpuFreqThread::CanRun()) {
-      logprintf(0, "Process Error: This platform does not support this "
+      logprintf(0,
+                "Process Error: This platform does not support this "
                 "test.\n");
       bad_status();
       return false;
     } else if (cpu_freq_threshold_ <= 0) {
-      logprintf(0, "Process Error: The cpu frequency test requires "
+      logprintf(0,
+                "Process Error: The cpu frequency test requires "
                 "--cpu_freq_threshold set to a value > 0\n");
       bad_status();
       return false;
     } else if (cpu_freq_round_ < 0) {
-      logprintf(0, "Process Error: The --cpu_freq_round option must be greater"
+      logprintf(0,
+                "Process Error: The --cpu_freq_round option must be greater"
                 " than or equal to zero. A value of zero means no rounding.\n");
       bad_status();
       return false;
@@ -152,8 +144,7 @@ bool Sat::CheckEnvironment() {
   }
 
   // Use all memory if no size is specified.
-  if (size_mb_ == 0)
-    size_mb_ = os_->FindFreeMemSize() / kMegabyte;
+  if (size_mb_ == 0) size_mb_ = os_->FindFreeMemSize() / kMegabyte;
   size_ = static_cast<int64>(size_mb_) * kMegabyte;
 
   // Autodetect file locations.
@@ -182,11 +173,11 @@ bool Sat::CheckEnvironment() {
     return false;
   }
 
-  if (tag_mode_ && ((file_threads_ > 0) ||
-                    (disk_threads_ > 0) ||
-                    (net_threads_ > 0))) {
-    logprintf(0, "Process Error: Memory tag mode incompatible "
-                 "with disk/network DMA.\n");
+  if (tag_mode_ &&
+      ((file_threads_ > 0) || (disk_threads_ > 0) || (net_threads_ > 0))) {
+    logprintf(0,
+              "Process Error: Memory tag mode incompatible "
+              "with disk/network DMA.\n");
     bad_status();
     return false;
   }
@@ -205,8 +196,9 @@ bool Sat::CheckEnvironment() {
       logprintf(1, "Log: Unsupported system. Running with reduced coverage.\n");
       // This is ok, continue on.
     } else {
-      logprintf(0, "Process Error: Unsupported system, "
-                   "no error reporting available\n");
+      logprintf(0,
+                "Process Error: Unsupported system, "
+                "no error reporting available\n");
       logprintf(0, "Log: Command line option '-A' bypasses this error.\n");
       bad_status();
       return false;
@@ -246,10 +238,7 @@ bool Sat::InitializePatterns() {
 }
 
 // Get any valid page, no tag specified.
-bool Sat::GetValid(struct page_entry *pe) {
-  return GetValid(pe, kDontCareTag);
-}
-
+bool Sat::GetValid(struct page_entry *pe) { return GetValid(pe, kDontCareTag); }
 
 // Fetch and return empty and full pages into the empty and full pools.
 bool Sat::GetValid(struct page_entry *pe, int32 tag) {
@@ -267,7 +256,7 @@ bool Sat::GetValid(struct page_entry *pe, int32 tag) {
     pe->ts = os_->GetTimestamp();
     pe->lastpattern = pe->pattern;
 
-    return (pe->addr != 0);     // Return success or failure.
+    return (pe->addr != 0);  // Return success or failure.
   }
   return false;
 }
@@ -287,9 +276,7 @@ bool Sat::PutValid(struct page_entry *pe) {
 }
 
 // Get an empty page with any tag.
-bool Sat::GetEmpty(struct page_entry *pe) {
-  return GetEmpty(pe, kDontCareTag);
-}
+bool Sat::GetEmpty(struct page_entry *pe) { return GetEmpty(pe, kDontCareTag); }
 
 bool Sat::GetEmpty(struct page_entry *pe, int32 tag) {
   bool result = false;
@@ -301,7 +288,7 @@ bool Sat::GetEmpty(struct page_entry *pe, int32 tag) {
 
   if (result) {
     pe->addr = os_->PrepareTestMem(pe->offset, page_length_);  // Map it.
-    return (pe->addr != 0);     // Return success or failure.
+    return (pe->addr != 0);  // Return success or failure.
   }
   return false;
 }
@@ -323,8 +310,7 @@ bool Sat::PutEmpty(struct page_entry *pe) {
 // Set up the bitmap of physical pages in case we want to see which pages were
 // accessed under this run of SAT.
 void Sat::AddrMapInit() {
-  if (!do_page_map_)
-    return;
+  if (!do_page_map_) return;
   // Find about how much physical mem is in the system.
   // TODO(nsanders): Find some way to get the max
   // and min phys addr in the system.
@@ -347,13 +333,12 @@ void Sat::AddrMapInit() {
 
 // Add the 4k pages in this block to the array of pages SAT has seen.
 void Sat::AddrMapUpdate(struct page_entry *pe) {
-  if (!do_page_map_)
-    return;
+  if (!do_page_map_) return;
 
   // Go through 4k page blocks.
   uint64 arraysize = page_bitmap_size_ / 4096 / 8;
 
-  char *base = reinterpret_cast<char*>(pe->addr);
+  char *base = reinterpret_cast<char *>(pe->addr);
   for (int i = 0; i < page_length_; i += 4096) {
     uint64 paddr = os_->VirtualToPhysical(base + i);
 
@@ -361,8 +346,9 @@ void Sat::AddrMapUpdate(struct page_entry *pe) {
     unsigned char mask = 1 << ((paddr / 4096) % 8);
 
     if (offset >= arraysize) {
-      logprintf(0, "Process Error: Physical address %#llx is "
-                   "greater than expected %#llx.\n",
+      logprintf(0,
+                "Process Error: Physical address %#llx is "
+                "greater than expected %#llx.\n",
                 paddr, page_bitmap_size_);
       sat_assert(0);
     }
@@ -372,8 +358,7 @@ void Sat::AddrMapUpdate(struct page_entry *pe) {
 
 // Print out the physical memory ranges that SAT has accessed.
 void Sat::AddrMapPrint() {
-  if (!do_page_map_)
-    return;
+  if (!do_page_map_) return;
 
   uint64 pages = page_bitmap_size_ / 4096;
 
@@ -382,7 +367,7 @@ void Sat::AddrMapPrint() {
 
   logprintf(4, "Log: Printing tested physical ranges.\n");
 
-  for (uint64 i = 0; i < pages; i ++) {
+  for (uint64 i = 0; i < pages; i++) {
     int offset = i / 8;
     unsigned char mask = 1 << (i % 8);
 
@@ -402,11 +387,8 @@ void Sat::AddrMapPrint() {
 bool Sat::InitializePages() {
   int result = 1;
   // Calculate needed page totals.
-  int64 neededpages = memory_threads_ +
-    invert_threads_ +
-    check_threads_ +
-    net_threads_ +
-    file_threads_;
+  int64 neededpages = memory_threads_ + invert_threads_ + check_threads_ +
+                      net_threads_ + file_threads_;
 
   // Empty-valid page ratio is adjusted depending on queue implementation.
   // since fine-grain-locked queue keeps both valid and empty entries in the
@@ -420,24 +402,21 @@ bool Sat::InitializePages() {
   if (freepages_ < neededpages) {
     logprintf(0, "Process Error: freepages < neededpages.\n");
     logprintf(1, "Stats: Total: %lld, Needed: %lld, Marked free: %lld\n",
-              static_cast<int64>(pages_),
-              static_cast<int64>(neededpages),
+              static_cast<int64>(pages_), static_cast<int64>(neededpages),
               static_cast<int64>(freepages_));
     bad_status();
     return false;
   }
 
-  if (freepages_ >  pages_/2) {
+  if (freepages_ > pages_ / 2) {
     logprintf(0, "Process Error: not enough pages for IO\n");
     logprintf(1, "Stats: Total: %lld, Needed: %lld, Available: %lld\n",
-              static_cast<int64>(pages_),
-              static_cast<int64>(freepages_),
-              static_cast<int64>(pages_/2));
+              static_cast<int64>(pages_), static_cast<int64>(freepages_),
+              static_cast<int64>(pages_ / 2));
     bad_status();
     return false;
   }
-  logprintf(12, "Log: Allocating pages, Total: %lld Free: %lld\n",
-            pages_,
+  logprintf(12, "Log: Allocating pages, Total: %lld Free: %lld\n", pages_,
             freepages_);
 
   // Initialize page locations.
@@ -459,21 +438,21 @@ bool Sat::InitializePages() {
   WorkerStatus fill_status;
   WorkerVector fill_vector;
 
-  logprintf(12, "Starting Fill threads: %d threads, %d pages\n",
-            fill_threads_, pages_);
+  logprintf(12, "Starting Fill threads: %d threads, %d pages\n", fill_threads_,
+            pages_);
   // Initialize the fill threads.
   for (int i = 0; i < fill_threads_; i++) {
     FillThread *thread = new FillThread();
     thread->InitThread(i, this, os_, patternlist_, &fill_status);
     if (i != fill_threads_ - 1) {
-        logprintf(12, "Starting Fill Threads %d: %d pages\n",
-                  i, pages_ / fill_threads_);
-        thread->SetFillPages(pages_ / fill_threads_);
+      logprintf(12, "Starting Fill Threads %d: %d pages\n", i,
+                pages_ / fill_threads_);
+      thread->SetFillPages(pages_ / fill_threads_);
       // The last thread finishes up all the leftover pages.
     } else {
-      logprintf(12, "Starting Fill Threads %d: %d pages\n",
-                i, pages_ - pages_ / fill_threads_ * i);
-        thread->SetFillPages(pages_ - pages_ / fill_threads_ * i);
+      logprintf(12, "Starting Fill Threads %d: %d pages\n", i,
+                pages_ - pages_ / fill_threads_ * i);
+      thread->SetFillPages(pages_ - pages_ / fill_threads_ * i);
     }
     fill_vector.push_back(thread);
   }
@@ -491,7 +470,7 @@ bool Sat::InitializePages() {
     if ((*it)->GetStatus() != 1) {
       logprintf(0, "Thread %d failed with status %d at %.2f seconds\n",
                 (*it)->ThreadID(), (*it)->GetStatus(),
-                (*it)->GetRunDurationUSec() * 1.0/1000000);
+                (*it)->GetRunDurationUSec() * 1.0 / 1000000);
       bad_status();
       return false;
     }
@@ -529,8 +508,8 @@ bool Sat::InitializePages() {
         result &= PutValid(&pe);
       }
     } else {
-      logprintf(0, "Log: didn't tag all pages. %d - %d = %d\n",
-                pages_, i, pages_ - i);
+      logprintf(0, "Log: didn't tag all pages. %d - %d = %d\n", pages_, i,
+                pages_ - i);
       return false;
     }
   }
@@ -551,13 +530,12 @@ bool Sat::InitializePages() {
 
 // Print SAT version info.
 bool Sat::PrintVersion() {
-  logprintf(1, "Stats: SAT revision %s, %d bit binary\n",
-            kVersion, address_mode_);
+  logprintf(1, "Stats: SAT revision %s, %d bit binary\n", kVersion,
+            address_mode_);
   logprintf(5, "Log: %s from %s\n", Timestamp(), BuildChangelist());
 
   return true;
 }
-
 
 // Initializes the resources that SAT needs to run.
 // This needs to be called before Run(), and after ParseArgs().
@@ -566,8 +544,7 @@ bool Sat::Initialize() {
   g_sat = this;
 
   // Initializes sync'd log file to ensure output is saved.
-  if (!InitializeLogfile())
-    return false;
+  if (!InitializeLogfile()) return false;
   Logger::GlobalLogger()->SetTimestampLogging(log_timestamps_);
   Logger::GlobalLogger()->StartThread();
 
@@ -588,14 +565,14 @@ bool Sat::Initialize() {
   if (min_hugepages_mbytes_ > 0)
     os_->SetMinimumHugepagesSize(min_hugepages_mbytes_ * kMegabyte);
 
-  if (reserve_mb_ > 0)
-    os_->SetReserveSize(reserve_mb_);
+  if (reserve_mb_ > 0) os_->SetReserveSize(reserve_mb_);
 
   if (channels_.size() > 0) {
-    logprintf(6, "Log: Decoding memory: %dx%d bit channels,"
-        "%d modules per channel (x%d), decoding hash 0x%x\n",
-        channels_.size(), channel_width_, channels_[0].size(),
-        channel_width_/channels_[0].size(), channel_hash_);
+    logprintf(6,
+              "Log: Decoding memory: %dx%d bit channels,"
+              "%d modules per channel (x%d), decoding hash 0x%x\n",
+              channels_.size(), channel_width_, channels_[0].size(),
+              channel_width_ / channels_[0].size(), channel_hash_);
     os_->SetDramMappingParams(channel_hash_, channel_width_, &channels_);
   }
 
@@ -607,46 +584,40 @@ bool Sat::Initialize() {
   }
 
   // Checks that OS/Build/Platform is supported.
-  if (!CheckEnvironment())
-    return false;
+  if (!CheckEnvironment()) return false;
 
-  if (error_injection_)
-    os_->set_error_injection(true);
+  if (error_injection_) os_->set_error_injection(true);
 
   // Run SAT in monitor only mode, do not continue to allocate resources.
   if (monitor_mode_) {
-    logprintf(5, "Log: Running in monitor-only mode. "
-                 "Will not allocate any memory nor run any stress test. "
-                 "Only polling ECC errors.\n");
+    logprintf(5,
+              "Log: Running in monitor-only mode. "
+              "Will not allocate any memory nor run any stress test. "
+              "Only polling ECC errors.\n");
     return true;
   }
 
   // Allocate the memory to test.
-  if (!AllocateMemory())
-    return false;
+  if (!AllocateMemory()) return false;
 
   logprintf(5, "Stats: Starting SAT, %dM, %d seconds\n",
-            static_cast<int>(size_/kMegabyte),
-            runtime_seconds_);
+            static_cast<int>(size_ / kMegabyte), runtime_seconds_);
 
-  if (!InitializePatterns())
-    return false;
+  if (!InitializePatterns()) return false;
 
   // Initialize memory allocation.
   pages_ = size_ / page_length_;
 
   // Allocate page queue depending on queue implementation switch.
   if (pe_q_implementation_ == SAT_FINELOCK) {
-      finelock_q_ = new FineLockPEQueue(pages_, page_length_);
-      if (finelock_q_ == NULL)
-        return false;
-      finelock_q_->set_os(os_);
-      os_->set_err_log_callback(finelock_q_->get_err_log_callback());
+    finelock_q_ = new FineLockPEQueue(pages_, page_length_);
+    if (finelock_q_ == NULL) return false;
+    finelock_q_->set_os(os_);
+    os_->set_err_log_callback(finelock_q_->get_err_log_callback());
   } else if (pe_q_implementation_ == SAT_ONELOCK) {
-      empty_ = new PageEntryQueue(pages_);
-      valid_ = new PageEntryQueue(pages_);
-      if ((empty_ == NULL) || (valid_ == NULL))
-        return false;
+    empty_ = new PageEntryQueue(pages_);
+    valid_ = new PageEntryQueue(pages_);
+    if ((empty_ == NULL) || (valid_ == NULL)) return false;
   }
 
   if (!InitializePages()) {
@@ -765,27 +736,24 @@ Sat::~Sat() {
   // We should probably enforce this.
 }
 
-
-#define ARG_KVALUE(argument, variable, value)         \
-  if (!strcmp(argv[i], argument)) {                   \
-    variable = value;                                 \
-    continue;                                         \
+#define ARG_KVALUE(argument, variable, value) \
+  if (!strcmp(argv[i], argument)) {           \
+    variable = value;                         \
+    continue;                                 \
   }
 
-#define ARG_IVALUE(argument, variable)                \
-  if (!strcmp(argv[i], argument)) {                   \
-    i++;                                              \
-    if (i < argc)                                     \
-      variable = strtoull(argv[i], NULL, 0);          \
-    continue;                                         \
+#define ARG_IVALUE(argument, variable)                   \
+  if (!strcmp(argv[i], argument)) {                      \
+    i++;                                                 \
+    if (i < argc) variable = strtoull(argv[i], NULL, 0); \
+    continue;                                            \
   }
 
-#define ARG_SVALUE(argument, variable)                     \
-  if (!strcmp(argv[i], argument)) {                        \
-    i++;                                                   \
-    if (i < argc)                                          \
-      snprintf(variable, sizeof(variable), "%s", argv[i]); \
-    continue;                                              \
+#define ARG_SVALUE(argument, variable)                                 \
+  if (!strcmp(argv[i], argument)) {                                    \
+    i++;                                                               \
+    if (i < argc) snprintf(variable, sizeof(variable), "%s", argv[i]); \
+    continue;                                                          \
   }
 
 // Configures SAT from command line arguments.
@@ -878,8 +846,7 @@ bool Sat::ParseArgs(int argc, char **argv) {
     // Inject errors to force miscompare code paths
     ARG_KVALUE("--force_errors", error_injection_, true);
     ARG_KVALUE("--force_errors_like_crazy", crazy_error_injection_, true);
-    if (crazy_error_injection_)
-      error_injection_ = true;
+    if (crazy_error_injection_) error_injection_ = true;
 
     // Stop immediately on any arror, for debugging HW problems.
     ARG_KVALUE("--stop_on_errors", stop_on_error_, 1);
@@ -987,7 +954,7 @@ bool Sat::ParseArgs(int argc, char **argv) {
       if (i < argc) {
         char *channel = argv[i];
         channels_.push_back(vector<string>());
-        while (char* next = strchr(channel, ',')) {
+        while (char *next = strchr(channel, ',')) {
           channels_.back().push_back(string(channel, next - channel));
           channel = next + 1;
         }
@@ -1016,76 +983,80 @@ bool Sat::ParseArgs(int argc, char **argv) {
   size_ = static_cast<int64>(size_mb_) * kMegabyte;
 
   // Set logfile flag.
-  if (strcmp(logfilename_, ""))
-    use_logfile_ = true;
+  if (strcmp(logfilename_, "")) use_logfile_ = true;
   // Checks valid page length.
-  if (page_length_ &&
-      !(page_length_ & (page_length_ - 1)) &&
+  if (page_length_ && !(page_length_ & (page_length_ - 1)) &&
       (page_length_ > 1023)) {
     // Prints if we have changed from default.
     if (page_length_ != kSatPageSize)
       logprintf(12, "Log: Updating page size to %d\n", page_length_);
   } else {
     // Revert to default page length.
-    logprintf(6, "Process Error: "
-              "Invalid page size %d\n", page_length_);
+    logprintf(6,
+              "Process Error: "
+              "Invalid page size %d\n",
+              page_length_);
     page_length_ = kSatPageSize;
     return false;
   }
 
   // Set disk_pages_ if filesize or page size changed.
-  if (filesize != static_cast<uint64>(page_length_) *
-                  static_cast<uint64>(disk_pages_)) {
+  if (filesize !=
+      static_cast<uint64>(page_length_) * static_cast<uint64>(disk_pages_)) {
     disk_pages_ = filesize / page_length_;
-    if (disk_pages_ == 0)
-      disk_pages_ = 1;
+    if (disk_pages_ == 0) disk_pages_ = 1;
   }
 
   // Validate memory channel parameters if supplied
   if (channels_.size()) {
     if (channels_.size() == 1) {
       channel_hash_ = 0;
-      logprintf(7, "Log: "
+      logprintf(
+          7,
+          "Log: "
           "Only one memory channel...deactivating interleave decoding.\n");
     } else if (channels_.size() > 2) {
-      logprintf(6, "Process Error: "
-          "Triple-channel mode not yet supported... sorry.\n");
+      logprintf(6,
+                "Process Error: "
+                "Triple-channel mode not yet supported... sorry.\n");
       bad_status();
       return false;
     }
     for (uint i = 0; i < channels_.size(); i++)
       if (channels_[i].size() != channels_[0].size()) {
-        logprintf(6, "Process Error: "
-            "Channels 0 and %d have a different count of dram modules.\n", i);
+        logprintf(6,
+                  "Process Error: "
+                  "Channels 0 and %d have a different count of dram modules.\n",
+                  i);
         bad_status();
         return false;
       }
     if (channels_[0].size() & (channels_[0].size() - 1)) {
-      logprintf(6, "Process Error: "
-          "Amount of modules per memory channel is not a power of 2.\n");
+      logprintf(6,
+                "Process Error: "
+                "Amount of modules per memory channel is not a power of 2.\n");
       bad_status();
       return false;
     }
-    if (channel_width_ < 16
-        || channel_width_ & (channel_width_ - 1)) {
-      logprintf(6, "Process Error: "
-          "Channel width %d is invalid.\n", channel_width_);
+    if (channel_width_ < 16 || channel_width_ & (channel_width_ - 1)) {
+      logprintf(6,
+                "Process Error: "
+                "Channel width %d is invalid.\n",
+                channel_width_);
       bad_status();
       return false;
     }
     if (channel_width_ / channels_[0].size() < 8) {
       logprintf(6, "Process Error: Chip width x%d must be x8 or greater.\n",
-          channel_width_ / channels_[0].size());
+                channel_width_ / channels_[0].size());
       bad_status();
       return false;
     }
   }
 
-
   // Print each argument.
   for (int i = 0; i < argc; i++) {
-    if (i)
-      cmdline_ += " ";
+    if (i) cmdline_ += " ";
     cmdline_ += argv[i];
   }
 
@@ -1093,81 +1064,82 @@ bool Sat::ParseArgs(int argc, char **argv) {
 }
 
 void Sat::PrintHelp() {
-  printf("Usage: ./sat(32|64) [options]\n"
-         " -M mbytes        megabytes of ram to test\n"
-         " --reserve-memory If not using hugepages, the amount of memory to "
-         " reserve for the system\n"
-         " -H mbytes        minimum megabytes of hugepages to require\n"
-         " -s seconds       number of seconds to run\n"
-         " -m threads       number of memory copy threads to run\n"
-         " -i threads       number of memory invert threads to run\n"
-         " -C threads       number of memory CPU stress threads to run\n"
-         " --findfiles      find locations to do disk IO automatically\n"
-         " -d device        add a direct write disk thread with block "
-         "device (or file) 'device'\n"
-         " -f filename      add a disk thread with "
-         "tempfile 'filename'\n"
-         " -l logfile       log output to file 'logfile'\n"
-         " --no_timestamps  do not prefix timestamps to log messages\n"
-         " --max_errors n   exit early after finding 'n' errors\n"
-         " -v level         verbosity (0-20), default is 8\n"
-         " --printsec secs  How often to print 'seconds remaining'\n"
-         " -W               Use more CPU-stressful memory copy\n"
-         " -A               run in degraded mode on incompatible systems\n"
-         " -p pagesize      size in bytes of memory chunks\n"
-         " --filesize size  size of disk IO tempfiles\n"
-         " -n ipaddr        add a network thread connecting to "
-         "system at 'ipaddr'\n"
-         " --listen         run a thread to listen for and respond "
-         "to network threads.\n"
-         " --no_errors      run without checking for ECC or other errors\n"
-         " --force_errors   inject false errors to test error handling\n"
-         " --force_errors_like_crazy   inject a lot of false errors "
-         "to test error handling\n"
-         " -F               don't result check each transaction\n"
-         " --stop_on_errors  Stop after finding the first error.\n"
-         " --read-block-size     size of block for reading (-d)\n"
-         " --write-block-size    size of block for writing (-d). If not "
-         "defined, the size of block for writing will be defined as the "
-         "size of block for reading\n"
-         " --segment-size   size of segments to split disk into (-d)\n"
-         " --cache-size     size of disk cache (-d)\n"
-         " --blocks-per-segment  number of blocks to read/write per "
-         "segment per iteration (-d)\n"
-         " --read-threshold      maximum time (in us) a block read should "
-         "take (-d)\n"
-         " --write-threshold     maximum time (in us) a block write "
-         "should take (-d)\n"
-         " --random-threads      number of random threads for each disk "
-         "write thread (-d)\n"
-         " --destructive    write/wipe disk partition (-d)\n"
-         " --monitor_mode   only do ECC error polling, no stress load.\n"
-         " --cc_test        do the cache coherency testing\n"
-         " --cc_inc_count   number of times to increment the "
-         "cacheline's member\n"
-         " --cc_line_count  number of cache line sized datastructures "
-         "to allocate for the cache coherency threads to operate\n"
-         " --cc_line_size   override the auto-detected cache line size\n"
-         " --cpu_freq_test  enable the cpu frequency test (requires the "
-         "--cpu_freq_threshold argument to be set)\n"
-         " --cpu_freq_threshold  fail the cpu frequency test if the frequency "
-         "goes below this value (specified in MHz)\n"
-         " --cpu_freq_round round the computed frequency to this value, if set"
-         " to zero, only round to the nearest MHz\n"
-         " --paddr_base     allocate memory starting from this address\n"
-         " --pause_delay    delay (in seconds) between power spikes\n"
-         " --pause_duration duration (in seconds) of each pause\n"
-         " --no_affinity    do not set any cpu affinity\n"
-         " --local_numa     choose memory regions associated with "
-         "each CPU to be tested by that CPU\n"
-         " --remote_numa    choose memory regions not associated with "
-         "each CPU to be tested by that CPU\n"
-         " --channel_hash   mask of address bits XORed to determine channel. "
-         "Mask 0x40 interleaves cachelines between channels\n"
-         " --channel_width bits     width in bits of each memory channel\n"
-         " --memory_channel u1,u2   defines a comma-separated list of names "
-         "for dram packages in a memory channel. Use multiple times to "
-         "define multiple channels.\n");
+  printf(
+      "Usage: ./sat(32|64) [options]\n"
+      " -M mbytes        megabytes of ram to test\n"
+      " --reserve-memory If not using hugepages, the amount of memory to "
+      " reserve for the system\n"
+      " -H mbytes        minimum megabytes of hugepages to require\n"
+      " -s seconds       number of seconds to run\n"
+      " -m threads       number of memory copy threads to run\n"
+      " -i threads       number of memory invert threads to run\n"
+      " -C threads       number of memory CPU stress threads to run\n"
+      " --findfiles      find locations to do disk IO automatically\n"
+      " -d device        add a direct write disk thread with block "
+      "device (or file) 'device'\n"
+      " -f filename      add a disk thread with "
+      "tempfile 'filename'\n"
+      " -l logfile       log output to file 'logfile'\n"
+      " --no_timestamps  do not prefix timestamps to log messages\n"
+      " --max_errors n   exit early after finding 'n' errors\n"
+      " -v level         verbosity (0-20), default is 8\n"
+      " --printsec secs  How often to print 'seconds remaining'\n"
+      " -W               Use more CPU-stressful memory copy\n"
+      " -A               run in degraded mode on incompatible systems\n"
+      " -p pagesize      size in bytes of memory chunks\n"
+      " --filesize size  size of disk IO tempfiles\n"
+      " -n ipaddr        add a network thread connecting to "
+      "system at 'ipaddr'\n"
+      " --listen         run a thread to listen for and respond "
+      "to network threads.\n"
+      " --no_errors      run without checking for ECC or other errors\n"
+      " --force_errors   inject false errors to test error handling\n"
+      " --force_errors_like_crazy   inject a lot of false errors "
+      "to test error handling\n"
+      " -F               don't result check each transaction\n"
+      " --stop_on_errors  Stop after finding the first error.\n"
+      " --read-block-size     size of block for reading (-d)\n"
+      " --write-block-size    size of block for writing (-d). If not "
+      "defined, the size of block for writing will be defined as the "
+      "size of block for reading\n"
+      " --segment-size   size of segments to split disk into (-d)\n"
+      " --cache-size     size of disk cache (-d)\n"
+      " --blocks-per-segment  number of blocks to read/write per "
+      "segment per iteration (-d)\n"
+      " --read-threshold      maximum time (in us) a block read should "
+      "take (-d)\n"
+      " --write-threshold     maximum time (in us) a block write "
+      "should take (-d)\n"
+      " --random-threads      number of random threads for each disk "
+      "write thread (-d)\n"
+      " --destructive    write/wipe disk partition (-d)\n"
+      " --monitor_mode   only do ECC error polling, no stress load.\n"
+      " --cc_test        do the cache coherency testing\n"
+      " --cc_inc_count   number of times to increment the "
+      "cacheline's member\n"
+      " --cc_line_count  number of cache line sized datastructures "
+      "to allocate for the cache coherency threads to operate\n"
+      " --cc_line_size   override the auto-detected cache line size\n"
+      " --cpu_freq_test  enable the cpu frequency test (requires the "
+      "--cpu_freq_threshold argument to be set)\n"
+      " --cpu_freq_threshold  fail the cpu frequency test if the frequency "
+      "goes below this value (specified in MHz)\n"
+      " --cpu_freq_round round the computed frequency to this value, if set"
+      " to zero, only round to the nearest MHz\n"
+      " --paddr_base     allocate memory starting from this address\n"
+      " --pause_delay    delay (in seconds) between power spikes\n"
+      " --pause_duration duration (in seconds) of each pause\n"
+      " --no_affinity    do not set any cpu affinity\n"
+      " --local_numa     choose memory regions associated with "
+      "each CPU to be tested by that CPU\n"
+      " --remote_numa    choose memory regions not associated with "
+      "each CPU to be tested by that CPU\n"
+      " --channel_hash   mask of address bits XORed to determine channel. "
+      "Mask 0x40 interleaves cachelines between channels\n"
+      " --channel_width bits     width in bits of each memory channel\n"
+      " --memory_channel u1,u2   defines a comma-separated list of names "
+      "for dram packages in a memory channel. Use multiple times to "
+      "define multiple channels.\n");
 }
 
 bool Sat::CheckGoogleSpecificArgs(int argc, char **argv, int *i) {
@@ -1237,8 +1209,8 @@ void Sat::InitializeThreads() {
         // Place a thread on alternating cores first.
         // This assures interleaved core use with no overlap.
         int nthcore = i;
-        int nthbit = (((2 * nthcore) % cores) +
-                      (((2 * nthcore) / cores) % 2)) % cores;
+        int nthbit =
+            (((2 * nthcore) % cores) + (((2 * nthcore) / cores) % 2)) % cores;
         cpu_set_t all_cores;
         cpuset_set_ab(&all_cores, 0, cores);
         if (!cpuset_isequal(&available_cpus, &all_cores)) {
@@ -1328,8 +1300,7 @@ void Sat::InitializeThreads() {
                        &power_spike_status_);
     thread->SetDevice(diskfilename_[i].c_str());
     if (thread->SetParameters(read_block_size_, write_block_size_,
-                              segment_size_, cache_size_,
-                              blocks_per_segment_,
+                              segment_size_, cache_size_, blocks_per_segment_,
                               read_threshold_, write_threshold_,
                               non_destructive_)) {
       disk_vector->insert(disk_vector->end(), thread);
@@ -1346,12 +1317,11 @@ void Sat::InitializeThreads() {
       rthread->SetDevice(diskfilename_[i].c_str());
       if (rthread->SetParameters(read_block_size_, write_block_size_,
                                  segment_size_, cache_size_,
-                                 blocks_per_segment_,
-                                 read_threshold_, write_threshold_,
-                                 non_destructive_)) {
+                                 blocks_per_segment_, read_threshold_,
+                                 write_threshold_, non_destructive_)) {
         random_vector->insert(random_vector->end(), rthread);
       } else {
-      logprintf(12, "Log: RandomDiskThread::SetParameters() failed\n");
+        logprintf(12, "Log: RandomDiskThread::SetParameters() failed\n");
         delete rthread;
       }
     }
@@ -1378,8 +1348,8 @@ void Sat::InitializeThreads() {
       // Go in reverse order for CPU stress threads. This assures interleaved
       // core use with no overlap.
       int nthcore = (cores - 1) - i;
-      int nthbit = (((2 * nthcore) % cores) +
-                    (((2 * nthcore) / cores) % 2)) % cores;
+      int nthbit =
+          (((2 * nthcore) % cores) + (((2 * nthcore) / cores) % 2)) % cores;
       cpu_set_t all_cores;
       cpuset_set_ab(&all_cores, 0, cores);
       if (!cpuset_isequal(&available_cpus, &all_cores)) {
@@ -1402,7 +1372,7 @@ void Sat::InitializeThreads() {
     logprintf(12, "Log: Starting cpu cache coherency threads\n");
 
     // Allocate the shared datastructure to be worked on by the threads.
-    cc_cacheline_data_ = reinterpret_cast<cc_cacheline_data*>(
+    cc_cacheline_data_ = reinterpret_cast<cc_cacheline_data *>(
         malloc(sizeof(cc_cacheline_data) * cc_cacheline_count_));
     sat_assert(cc_cacheline_data_ != NULL);
 
@@ -1417,8 +1387,7 @@ void Sat::InitializeThreads() {
     int line_size = cc_cacheline_size_;
     if (line_size <= 0) {
       line_size = CacheLineSize();
-      if (line_size < kCacheLineSize)
-        line_size = kCacheLineSize;
+      if (line_size < kCacheLineSize) line_size = kCacheLineSize;
       logprintf(12, "Log: Using %d as cache line size\n", line_size);
     }
     // The number of cache lines needed to hold an array of num_cpus.
@@ -1428,12 +1397,12 @@ void Sat::InitializeThreads() {
     // Allocate all the nums once so that we get a single chunk
     // of contiguous memory.
 #ifdef HAVE_POSIX_MEMALIGN
-    int err_result = posix_memalign(
-        reinterpret_cast<void**>(&num),
-        line_size, line_size * needed_lines * cc_cacheline_count_);
+    int err_result =
+        posix_memalign(reinterpret_cast<void **>(&num), line_size,
+                       line_size * needed_lines * cc_cacheline_count_);
 #else
-    num = reinterpret_cast<int*>(memalign(
-        line_size, line_size * needed_lines * cc_cacheline_count_));
+    num = reinterpret_cast<int *>(
+        memalign(line_size, line_size * needed_lines * cc_cacheline_count_));
     int err_result = (num == 0);
 #endif
     sat_assert(err_result == 0);
@@ -1465,11 +1434,10 @@ void Sat::InitializeThreads() {
     // Create the frequency test thread.
     logprintf(5, "Log: Running cpu frequency test: threshold set to %dMHz.\n",
               cpu_freq_threshold_);
-    CpuFreqThread *thread = new CpuFreqThread(CpuCount(), cpu_freq_threshold_,
-                                              cpu_freq_round_);
+    CpuFreqThread *thread =
+        new CpuFreqThread(CpuCount(), cpu_freq_threshold_, cpu_freq_round_);
     // This thread should be paused when other threads are paused.
-    thread->InitThread(total_threads_++, this, os_, NULL,
-                       &power_spike_status_);
+    thread->InitThread(total_threads_++, this, os_, NULL, &power_spike_status_);
 
     WorkerVector *cpu_freq_vector = new WorkerVector();
     cpu_freq_vector->insert(cpu_freq_vector->end(), thread);
@@ -1480,16 +1448,13 @@ void Sat::InitializeThreads() {
 }
 
 // Return the number of cpus actually present in the machine.
-int Sat::CpuCount() {
-  return sysconf(_SC_NPROCESSORS_CONF);
-}
+int Sat::CpuCount() { return sysconf(_SC_NPROCESSORS_CONF); }
 
 int Sat::ReadInt(const char *filename, int *value) {
   char line[64];
   int fd = open(filename, O_RDONLY), err = -1;
 
-  if (fd < 0)
-    return -1;
+  if (fd < 0) return -1;
   if (read(fd, line, sizeof(line)) > 0) {
     *value = atoi(line);
     err = 0;
@@ -1506,24 +1471,28 @@ int Sat::CacheLineSize() {
 #ifdef _SC_LEVEL1_DCACHE_LINESIZE
   max_linesize = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
 #else
-  ReadInt("/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size", &max_linesize);
+  ReadInt("/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size",
+          &max_linesize);
 #endif
 #ifdef _SC_LEVEL2_DCACHE_LINESIZE
   linesize = sysconf(_SC_LEVEL2_DCACHE_LINESIZE);
 #else
-  ReadInt("/sys/devices/system/cpu/cpu0/cache/index1/coherency_line_size", &linesize);
+  ReadInt("/sys/devices/system/cpu/cpu0/cache/index1/coherency_line_size",
+          &linesize);
 #endif
   if (linesize > max_linesize) max_linesize = linesize;
 #ifdef _SC_LEVEL3_DCACHE_LINESIZE
   linesize = sysconf(_SC_LEVEL3_DCACHE_LINESIZE);
 #else
-  ReadInt("/sys/devices/system/cpu/cpu0/cache/index2/coherency_line_size", &linesize);
+  ReadInt("/sys/devices/system/cpu/cpu0/cache/index2/coherency_line_size",
+          &linesize);
 #endif
   if (linesize > max_linesize) max_linesize = linesize;
 #ifdef _SC_LEVEL4_DCACHE_LINESIZE
   linesize = sysconf(_SC_LEVEL4_DCACHE_LINESIZE);
 #else
-  ReadInt("/sys/devices/system/cpu/cpu0/cache/index3/coherency_line_size", &linesize);
+  ReadInt("/sys/devices/system/cpu/cpu0/cache/index3/coherency_line_size",
+          &linesize);
 #endif
   if (linesize > max_linesize) max_linesize = linesize;
   return max_linesize;
@@ -1599,37 +1568,36 @@ void Sat::JoinThreads() {
          it != map_it->second->end(); ++it) {
       logprintf(12, "Log: Reaping thread status %d\n", (*it)->ThreadID());
       if ((*it)->GetStatus() != 1) {
-        logprintf(0, "Process Error: Thread %d failed with status %d at "
+        logprintf(0,
+                  "Process Error: Thread %d failed with status %d at "
                   "%.2f seconds\n",
                   (*it)->ThreadID(), (*it)->GetStatus(),
-                  (*it)->GetRunDurationUSec()*1.0/1000000);
+                  (*it)->GetRunDurationUSec() * 1.0 / 1000000);
         bad_status();
       }
       int priority = 12;
-      if ((*it)->GetErrorCount())
-        priority = 5;
+      if ((*it)->GetErrorCount()) priority = 5;
       logprintf(priority, "Log: Thread %d found %lld hardware incidents\n",
                 (*it)->ThreadID(), (*it)->GetErrorCount());
     }
   }
   ReleaseWorkerLock();
 
-
   // Add in any errors from check threads.
   for (WorkerVector::const_iterator it = reap_check_vector.begin();
        it != reap_check_vector.end(); ++it) {
     logprintf(12, "Log: Reaping thread status %d\n", (*it)->ThreadID());
     if ((*it)->GetStatus() != 1) {
-      logprintf(0, "Process Error: Thread %d failed with status %d at "
+      logprintf(0,
+                "Process Error: Thread %d failed with status %d at "
                 "%.2f seconds\n",
                 (*it)->ThreadID(), (*it)->GetStatus(),
-                (*it)->GetRunDurationUSec()*1.0/1000000);
+                (*it)->GetRunDurationUSec() * 1.0 / 1000000);
       bad_status();
     }
     errorcount_ += (*it)->GetErrorCount();
     int priority = 12;
-    if ((*it)->GetErrorCount())
-      priority = 5;
+    if ((*it)->GetErrorCount()) priority = 5;
     logprintf(priority, "Log: Thread %d found %lld hardware incidents\n",
               (*it)->ThreadID(), (*it)->GetErrorCount());
     delete (*it);
@@ -1639,9 +1607,7 @@ void Sat::JoinThreads() {
 }
 
 // Print queuing information.
-void Sat::QueueStats() {
-  finelock_q_->QueueAnalysis();
-}
+void Sat::QueueStats() { finelock_q_->QueueAnalysis(); }
 
 void Sat::AnalysisAllStats() {
   float max_runtime_sec = 0.;
@@ -1653,7 +1619,7 @@ void Sat::AnalysisAllStats() {
        map_it != workers_map_.end(); ++map_it) {
     for (WorkerVector::const_iterator it = map_it->second->begin();
          it != map_it->second->end(); ++it) {
-      thread_runtime_sec = (*it)->GetRunDurationUSec()*1.0/1000000.;
+      thread_runtime_sec = (*it)->GetRunDurationUSec() * 1.0 / 1000000.;
       total_data += (*it)->GetMemoryCopiedData();
       total_data += (*it)->GetDeviceCopiedData();
       if (thread_runtime_sec > max_runtime_sec) {
@@ -1664,22 +1630,20 @@ void Sat::AnalysisAllStats() {
 
   total_bandwidth = total_data / max_runtime_sec;
 
-  logprintf(0, "Stats: Completed: %.2fM in %.2fs %.2fMB/s, "
+  logprintf(0,
+            "Stats: Completed: %.2fM in %.2fs %.2fMB/s, "
             "with %d hardware incidents, %d errors\n",
-            total_data,
-            max_runtime_sec,
-            total_bandwidth,
-            errorcount_,
+            total_data, max_runtime_sec, total_bandwidth, errorcount_,
             statuscount_);
 }
 
 void Sat::MemoryStats() {
   float memcopy_data = 0.;
   float memcopy_bandwidth = 0.;
-  WorkerMap::const_iterator mem_it = workers_map_.find(
-      static_cast<int>(kMemoryType));
-  WorkerMap::const_iterator file_it = workers_map_.find(
-      static_cast<int>(kFileIOType));
+  WorkerMap::const_iterator mem_it =
+      workers_map_.find(static_cast<int>(kMemoryType));
+  WorkerMap::const_iterator file_it =
+      workers_map_.find(static_cast<int>(kFileIOType));
   sat_assert(mem_it != workers_map_.end());
   sat_assert(file_it != workers_map_.end());
   for (WorkerVector::const_iterator it = mem_it->second->begin();
@@ -1693,55 +1657,51 @@ void Sat::MemoryStats() {
     memcopy_bandwidth += (*it)->GetMemoryBandwidth();
   }
   GoogleMemoryStats(&memcopy_data, &memcopy_bandwidth);
-  logprintf(4, "Stats: Memory Copy: %.2fM at %.2fMB/s\n",
-            memcopy_data,
+  logprintf(4, "Stats: Memory Copy: %.2fM at %.2fMB/s\n", memcopy_data,
             memcopy_bandwidth);
 }
 
-void Sat::GoogleMemoryStats(float *memcopy_data,
-                            float *memcopy_bandwidth) {
+void Sat::GoogleMemoryStats(float *memcopy_data, float *memcopy_bandwidth) {
   // Do nothing, should be implemented by subclasses.
 }
 
 void Sat::FileStats() {
   float file_data = 0.;
   float file_bandwidth = 0.;
-  WorkerMap::const_iterator file_it = workers_map_.find(
-      static_cast<int>(kFileIOType));
+  WorkerMap::const_iterator file_it =
+      workers_map_.find(static_cast<int>(kFileIOType));
   sat_assert(file_it != workers_map_.end());
   for (WorkerVector::const_iterator it = file_it->second->begin();
        it != file_it->second->end(); ++it) {
     file_data += (*it)->GetDeviceCopiedData();
     file_bandwidth += (*it)->GetDeviceBandwidth();
   }
-  logprintf(4, "Stats: File Copy: %.2fM at %.2fMB/s\n",
-            file_data,
+  logprintf(4, "Stats: File Copy: %.2fM at %.2fMB/s\n", file_data,
             file_bandwidth);
 }
 
 void Sat::CheckStats() {
   float check_data = 0.;
   float check_bandwidth = 0.;
-  WorkerMap::const_iterator check_it = workers_map_.find(
-      static_cast<int>(kCheckType));
+  WorkerMap::const_iterator check_it =
+      workers_map_.find(static_cast<int>(kCheckType));
   sat_assert(check_it != workers_map_.end());
   for (WorkerVector::const_iterator it = check_it->second->begin();
        it != check_it->second->end(); ++it) {
     check_data += (*it)->GetMemoryCopiedData();
     check_bandwidth += (*it)->GetMemoryBandwidth();
   }
-  logprintf(4, "Stats: Data Check: %.2fM at %.2fMB/s\n",
-            check_data,
+  logprintf(4, "Stats: Data Check: %.2fM at %.2fMB/s\n", check_data,
             check_bandwidth);
 }
 
 void Sat::NetStats() {
   float net_data = 0.;
   float net_bandwidth = 0.;
-  WorkerMap::const_iterator netio_it = workers_map_.find(
-      static_cast<int>(kNetIOType));
-  WorkerMap::const_iterator netslave_it = workers_map_.find(
-      static_cast<int>(kNetSlaveType));
+  WorkerMap::const_iterator netio_it =
+      workers_map_.find(static_cast<int>(kNetIOType));
+  WorkerMap::const_iterator netslave_it =
+      workers_map_.find(static_cast<int>(kNetSlaveType));
   sat_assert(netio_it != workers_map_.end());
   sat_assert(netslave_it != workers_map_.end());
   for (WorkerVector::const_iterator it = netio_it->second->begin();
@@ -1754,34 +1714,31 @@ void Sat::NetStats() {
     net_data += (*it)->GetDeviceCopiedData();
     net_bandwidth += (*it)->GetDeviceBandwidth();
   }
-  logprintf(4, "Stats: Net Copy: %.2fM at %.2fMB/s\n",
-            net_data,
-            net_bandwidth);
+  logprintf(4, "Stats: Net Copy: %.2fM at %.2fMB/s\n", net_data, net_bandwidth);
 }
 
 void Sat::InvertStats() {
   float invert_data = 0.;
   float invert_bandwidth = 0.;
-  WorkerMap::const_iterator invert_it = workers_map_.find(
-      static_cast<int>(kInvertType));
+  WorkerMap::const_iterator invert_it =
+      workers_map_.find(static_cast<int>(kInvertType));
   sat_assert(invert_it != workers_map_.end());
   for (WorkerVector::const_iterator it = invert_it->second->begin();
        it != invert_it->second->end(); ++it) {
     invert_data += (*it)->GetMemoryCopiedData();
     invert_bandwidth += (*it)->GetMemoryBandwidth();
   }
-  logprintf(4, "Stats: Invert Data: %.2fM at %.2fMB/s\n",
-            invert_data,
+  logprintf(4, "Stats: Invert Data: %.2fM at %.2fMB/s\n", invert_data,
             invert_bandwidth);
 }
 
 void Sat::DiskStats() {
   float disk_data = 0.;
   float disk_bandwidth = 0.;
-  WorkerMap::const_iterator disk_it = workers_map_.find(
-      static_cast<int>(kDiskType));
-  WorkerMap::const_iterator random_it = workers_map_.find(
-      static_cast<int>(kRandomDiskType));
+  WorkerMap::const_iterator disk_it =
+      workers_map_.find(static_cast<int>(kDiskType));
+  WorkerMap::const_iterator random_it =
+      workers_map_.find(static_cast<int>(kRandomDiskType));
   sat_assert(disk_it != workers_map_.end());
   sat_assert(random_it != workers_map_.end());
   for (WorkerVector::const_iterator it = disk_it->second->begin();
@@ -1795,9 +1752,7 @@ void Sat::DiskStats() {
     disk_bandwidth += (*it)->GetDeviceBandwidth();
   }
 
-  logprintf(4, "Stats: Disk: %.2fM at %.2fMB/s\n",
-            disk_data,
-            disk_bandwidth);
+  logprintf(4, "Stats: Disk: %.2fM at %.2fMB/s\n", disk_data, disk_bandwidth);
 }
 
 // Process worker thread data for bandwidth information, and error results.
@@ -1827,7 +1782,6 @@ int64 Sat::GetTotalErrorCount() {
   ReleaseWorkerLock();
   return errors;
 }
-
 
 void Sat::SpawnThreads() {
   logprintf(12, "Log: Initializing WorkerStatus objects\n");
@@ -1878,7 +1832,7 @@ namespace {
 inline time_t NextOccurance(time_t frequency, time_t start, time_t now) {
   return start + frequency + (((now - start) / frequency) * frequency);
 }
-}
+}  // namespace
 
 // Run the actual test.
 bool Sat::Run() {
@@ -1954,10 +1908,10 @@ bool Sat::Run() {
     if (max_errorcount_ != 0) {
       uint64 errors = GetTotalErrorCount();
       if (errors > max_errorcount_) {
-        logprintf(0, "Log: Exiting early (%d seconds remaining) "
-                     "due to excessive failures (%lld)\n",
-                  seconds_remaining,
-                  errors);
+        logprintf(0,
+                  "Log: Exiting early (%d seconds remaining) "
+                  "due to excessive failures (%lld)\n",
+                  seconds_remaining, errors);
         break;
       }
     }
@@ -1981,8 +1935,10 @@ bool Sat::Run() {
 
     if (next_pause && now >= next_pause) {
       // Tell worker threads to pause in preparation for a power spike.
-      logprintf(4, "Log: Pausing worker threads in preparation for power spike "
-                "(%d seconds remaining)\n", seconds_remaining);
+      logprintf(4,
+                "Log: Pausing worker threads in preparation for power spike "
+                "(%d seconds remaining)\n",
+                seconds_remaining);
       power_spike_status_.PauseWorkers();
       logprintf(12, "Log: Worker threads paused\n");
       next_pause = 0;
@@ -1991,8 +1947,10 @@ bool Sat::Run() {
 
     if (next_resume && now >= next_resume) {
       // Tell worker threads to resume in order to cause a power spike.
-      logprintf(4, "Log: Resuming worker threads to cause a power spike (%d "
-                "seconds remaining)\n", seconds_remaining);
+      logprintf(4,
+                "Log: Resuming worker threads to cause a power spike (%d "
+                "seconds remaining)\n",
+                seconds_remaining);
       power_spike_status_.ResumeWorkers();
       logprintf(12, "Log: Worker threads resumed\n");
       next_pause = NextOccurance(pause_delay_, start, now);
@@ -2007,8 +1965,7 @@ bool Sat::Run() {
 
   logprintf(0, "Stats: Found %lld hardware incidents\n", errorcount_);
 
-  if (!monitor_mode_)
-    RunAnalysis();
+  if (!monitor_mode_) RunAnalysis();
 
   DeleteThreads();
 
@@ -2077,7 +2034,6 @@ bool Sat::Cleanup() {
   return true;
 }
 
-
 // Pretty print really obvious results.
 bool Sat::PrintResults() {
   bool result = true;
@@ -2113,7 +2069,4 @@ void logprintf(int priority, const char *format, ...) {
 }
 
 // Stop the logging thread and verify any pending data is written to the log.
-void logstop() {
-  Logger::GlobalLogger()->StopThread();
-}
-
+void logstop() { Logger::GlobalLogger()->StopThread(); }

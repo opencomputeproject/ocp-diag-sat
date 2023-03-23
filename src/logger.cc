@@ -1,16 +1,8 @@
-// Copyright 2009 Google Inc. All Rights Reserved.
-
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//      http://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
 
 #include "logger.h"
 
@@ -26,7 +18,6 @@
 // This file must work with autoconf on its public version,
 // so these includes are correct.
 #include "sattypes.h"
-
 
 Logger *Logger::GlobalLogger() {
   static Logger logger;
@@ -103,8 +94,8 @@ void Logger::QueueLogLine(string *line) {
   LOGGER_ASSERT(0 == pthread_mutex_lock(&queued_lines_mutex_));
   if (thread_running_) {
     if (queued_lines_.size() >= kMaxQueueSize) {
-      LOGGER_ASSERT(0 == pthread_cond_wait(&full_queue_cond_,
-                                           &queued_lines_mutex_));
+      LOGGER_ASSERT(0 ==
+                    pthread_cond_wait(&full_queue_cond_, &queued_lines_mutex_));
     }
     if (queued_lines_.empty()) {
       LOGGER_ASSERT(0 == pthread_cond_signal(&queued_lines_cond_));
@@ -129,19 +120,19 @@ void Logger::WriteAndDeleteLogLine(string *line) {
 }
 
 void *Logger::StartRoutine(void *ptr) {
-  Logger *self = static_cast<Logger*>(ptr);
+  Logger *self = static_cast<Logger *>(ptr);
   self->ThreadMain();
   return NULL;
 }
 
 void Logger::ThreadMain() {
-  vector<string*> local_queue;
+  vector<string *> local_queue;
   LOGGER_ASSERT(0 == pthread_mutex_lock(&queued_lines_mutex_));
 
   for (;;) {
     if (queued_lines_.empty()) {
-      LOGGER_ASSERT(0 == pthread_cond_wait(&queued_lines_cond_,
-                                           &queued_lines_mutex_));
+      LOGGER_ASSERT(
+          0 == pthread_cond_wait(&queued_lines_cond_, &queued_lines_mutex_));
       continue;
     }
 
@@ -155,7 +146,7 @@ void Logger::ThreadMain() {
 
     // Unlock while we process our local queue.
     LOGGER_ASSERT(0 == pthread_mutex_unlock(&queued_lines_mutex_));
-    for (vector<string*>::const_iterator it = local_queue.begin();
+    for (vector<string *>::const_iterator it = local_queue.begin();
          it != local_queue.end(); ++it) {
       if (*it == NULL) {
         // NULL is guaranteed to be at the end.

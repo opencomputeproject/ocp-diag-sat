@@ -1,16 +1,8 @@
-// Copyright 2006 Google Inc. All Rights Reserved.
-
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//      http://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
 
 // queue.cc : simple thread safe queue implementation
 
@@ -23,7 +15,6 @@
 
 // Page entry queue implementation follows.
 // Push inserts pages, pop returns a random entry.
-
 
 PageEntryQueue::PageEntryQueue(uint64 queuesize) {
   // There must always be one empty queue location,
@@ -46,8 +37,7 @@ int PageEntryQueue::Push(struct page_entry *pe) {
   int result = 0;
   int64 nextnextin;
 
-  if (!pe)
-    return 0;
+  if (!pe) return 0;
 
   pthread_mutex_lock(&q_mutex_);
   nextnextin = (nextin_ + 1) % q_size_;
@@ -74,8 +64,7 @@ int PageEntryQueue::PopRandom(struct page_entry *pe) {
   int64 newindex;
   struct page_entry tmp;
 
-  if (!pe)
-    return 0;
+  if (!pe) return 0;
 
   // TODO(nsanders): we should improve random to get 64 bit randoms, and make
   // it more thread friendly.
@@ -85,7 +74,6 @@ int PageEntryQueue::PopRandom(struct page_entry *pe) {
   if (retval)
     logprintf(0, "Process Error: pthreads mutex failure %d\n", retval);
 
-
   if (nextin_ != nextout_) {
     // Randomized fetch.
     // Swap random entry with next out.
@@ -94,8 +82,7 @@ int PageEntryQueue::PopRandom(struct page_entry *pe) {
       entries = (lastin - nextout_ + q_size_) % q_size_;
 
       newindex = nextout_;
-      if (entries)
-        newindex = ((rand % entries) + nextout_) % q_size_;
+      if (entries) newindex = ((rand % entries) + nextout_) % q_size_;
 
       // Swap the pages.
       tmp = pages_[nextout_];

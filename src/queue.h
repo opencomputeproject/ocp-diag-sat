@@ -1,16 +1,8 @@
-// Copyright 2006 Google Inc. All Rights Reserved.
-
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//      http://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
 
 // queue.h : simple queue api
 
@@ -21,19 +13,18 @@
 #ifndef STRESSAPPTEST_QUEUE_H_  // NOLINT
 #define STRESSAPPTEST_QUEUE_H_
 
-#include <sys/types.h>
 #include <pthread.h>
+#include <sys/types.h>
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
-#include "sattypes.h"  // NOLINT
 #include "pattern.h"   // NOLINT
+#include "sattypes.h"  // NOLINT
 
 // Tag indicating no preference.
 static const int kDontCareTag = -1;
 // Tag indicating no preference.
 static const int kInvalidTag = 0xf001;
-
 
 // This describes a block of memory, and the expected fill pattern.
 struct page_entry {
@@ -41,10 +32,10 @@ struct page_entry {
   void *addr;
   uint64 paddr;
   class Pattern *pattern;
-  int32 tag;     // These are tags for use in NUMA affinity or other uses.
-  uint32 touch;  // Counter of the number of reads from this page.
-  uint64 ts;     // Timestamp of the last read from this page.
-  uint32 lastcpu; // Last CPU to write this page.
+  int32 tag;       // These are tags for use in NUMA affinity or other uses.
+  uint32 touch;    // Counter of the number of reads from this page.
+  uint64 ts;       // Timestamp of the last read from this page.
+  uint32 lastcpu;  // Last CPU to write this page.
   class Pattern *lastpattern;  // Expected Pattern at last read.
 };
 
@@ -81,6 +72,5 @@ class PageEntryQueue {
 
   DISALLOW_COPY_AND_ASSIGN(PageEntryQueue);
 };
-
 
 #endif  // MILES_TESTS_SAT_QUEUE_H_ NOLINT

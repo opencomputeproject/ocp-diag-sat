@@ -1,16 +1,8 @@
-// Copyright 2006 Google Inc. All Rights Reserved.
-
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//      http://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2023 Google LLC
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
 
 // pattern.h : global pattern references and initialization
 
@@ -20,8 +12,8 @@
 #ifndef STRESSAPPTEST_PATTERN_H_
 #define STRESSAPPTEST_PATTERN_H_
 
-#include <vector>
 #include <string>
+#include <vector>
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
@@ -33,16 +25,16 @@ const int kBusShift = 2;
 
 // Pattern and CRC data structure
 struct PatternData {
-  const char *name;          // Name of this pattern.
-  unsigned int *pat;         // Data array.
-  unsigned int mask;         // Size - 1. data[index & mask] is always valid.
-  unsigned char weight[4];   // Weighted frequency of this pattern.
-                             // Each pattern has 32,64,128,256 width versions.
-                             // All weights are added up, a random number is
-                             // chosen between 0-sum(weights), and the
-                             // appropriate pattern is chosen. Thus a weight of
-                             // 1 is rare, a weight of 10 is 2x as likely to be
-                             // chosen as a weight of 5.
+  const char *name;         // Name of this pattern.
+  unsigned int *pat;        // Data array.
+  unsigned int mask;        // Size - 1. data[index & mask] is always valid.
+  unsigned char weight[4];  // Weighted frequency of this pattern.
+                            // Each pattern has 32,64,128,256 width versions.
+                            // All weights are added up, a random number is
+                            // chosen between 0-sum(weights), and the
+                            // appropriate pattern is chosen. Thus a weight of
+                            // 1 is rare, a weight of 10 is 2x as likely to be
+                            // chosen as a weight of 5.
 };
 
 // Data structure to access data patterns.
@@ -51,24 +43,21 @@ class Pattern {
   Pattern();
   ~Pattern();
   // Fill pattern data and calculate CRC.
-  int Initialize(const struct PatternData &pattern_init,
-                 int buswidth,
-                 bool invert,
-                 int weight);
+  int Initialize(const struct PatternData &pattern_init, int buswidth,
+                 bool invert, int weight);
 
   // Access data members.
   // "busshift_" allows for repeating each pattern word 1, 2, 4, etc. times.
   // in order to create patterns of different width.
   unsigned int pattern(unsigned int offset) {
     unsigned int data = pattern_->pat[(offset >> busshift_) & pattern_->mask];
-    if (inverse_)
-      data = ~data;
+    if (inverse_) data = ~data;
     return data;
   }
-  const AdlerChecksum *crc() {return crc_;}
-  unsigned int mask() {return pattern_->mask;}
-  unsigned int weight() {return weight_;}
-  const char *name() {return name_.c_str();}
+  const AdlerChecksum *crc() { return crc_; }
+  unsigned int mask() { return pattern_->mask; }
+  unsigned int weight() { return weight_; }
+  const char *name() { return name_.c_str(); }
 
  private:
   int CalculateCrc();
@@ -97,7 +86,7 @@ class PatternList {
   // Return a random pattern according to the specified weighted probability.
   Pattern *GetRandomPattern();
   // Return the number of patterns available.
-  int Size() {return size_;}
+  int Size() { return size_; }
 
  private:
   vector<class Pattern> patterns_;
@@ -119,6 +108,5 @@ static inline uint32 CrcIncrement(uint32 crc, uint32 expected, int index) {
 
   return crc + addition + carry;
 }
-
 
 #endif  // STRESSAPPTEST_PATTERN_H_
