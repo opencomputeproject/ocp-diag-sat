@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/strings/string_view.h"
 #include "finelock_queue.h"
 #include "ocpdiag/core/results/test_run.h"
 #include "ocpdiag/core/results/test_step.h"
@@ -23,6 +24,8 @@
 #include "queue.h"
 #include "sattypes.h"
 #include "worker.h"
+
+constexpr char kProcessError[] = "sat-process-error";
 
 // SAT stress test class.
 class Sat {
@@ -105,11 +108,11 @@ class Sat {
   // Opens log file for writing. Returns 0 on failure.
   bool InitializeLogfile();
   // Checks for supported environment. Returns 0 on failure.
-  bool CheckEnvironment();
+  bool CheckEnvironment(ocpdiag::results::TestStep &setup_step);
   // Allocates size_ bytes of test memory.
-  bool AllocateMemory();
+  bool AllocateMemory(ocpdiag::results::TestStep &setup_step);
   // Initializes datapattern reference structures.
-  bool InitializePatterns();
+  bool InitializePatterns(ocpdiag::results::TestStep &setup_step);
   // Initializes test memory with datapatterns.
   bool InitializePages();
 
@@ -162,7 +165,6 @@ class Sat {
   int warm_;                          // FPU warms CPU while copying.
   int address_mode_;                  // 32 or 64 bit binary.
   bool stop_on_error_;                // Exit immendiately on any error.
-  bool findfiles_;                    // Autodetect tempfile locations.
 
   bool error_injection_;        // Simulate errors, for unittests.
   bool crazy_error_injection_;  // Simulate lots of errors.
@@ -298,14 +300,12 @@ class Sat {
   void QueueStats();
 
   // Physical page use reporting.
-  void AddrMapInit();
+  void AddrMapInit(ocpdiag::results::TestStep &fill_step);
   void AddrMapUpdate(struct page_entry *pe);
   void AddrMapPrint(ocpdiag::results::TestStep &fill_step);
 
   // additional memory data from google-specific tests.
   virtual void GoogleMemoryStats(float *memcopy_data, float *memcopy_bandwidth);
-
-  virtual void GoogleOsOptions(std::map<std::string, std::string> *options);
 
   // Page queues, only one of (valid_+empty_) or (finelock_q_) will be used
   // at a time. A commandline switch controls which queue implementation will

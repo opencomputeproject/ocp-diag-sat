@@ -37,9 +37,20 @@
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
+#include "absl/strings/str_format.h"
 #include "clock.h"
 #include "error_diag.h"
+#include "ocpdiag/core/results/data_model/input_model.h"
+#include "ocpdiag/core/results/test_step.h"
 #include "sattypes.h"
+
+using ::ocpdiag::results::Error;
+using ::ocpdiag::results::Log;
+using ::ocpdiag::results::LogSeverity;
+using ::ocpdiag::results::Measurement;
+using ::ocpdiag::results::TestStep;
+
+constexpr char kProcessError[] = "sat-process-error";
 
 // OsLayer initialization.
 OsLayer::OsLayer() {
@@ -85,39 +96,38 @@ OsLayer::~OsLayer() {
 }
 
 // OsLayer initialization.
-bool OsLayer::Initialize() {
+bool OsLayer::Initialize(TestStep &setup_step) {
   if (!clock_) {
     clock_ = new Clock();
   }
 
   time_initialized_ = clock_->Now();
   // Detect asm support.
-  GetFeatures();
+  GetFeatures(setup_step);
 
   if (num_cpus_ == 0) {
     num_nodes_ = 1;
     num_cpus_ = sysconf(_SC_NPROCESSORS_ONLN);
     num_cpus_per_node_ = num_cpus_ / num_nodes_;
   }
-  logprintf(5, "Log: %d nodes, %d cpus.\n", num_nodes_, num_cpus_);
+
+  setup_step.AddMeasurement(Measurement{
+      .name = "CPU Core Count",
+      .unit = "cores",
+      .value = static_cast<double>(num_cpus_),
+  });
+  setup_step.AddMeasurement(Measurement{
+      .name = "Node Count",
+      .unit = "nodes",
+      .value = static_cast<double>(num_nodes_),
+  });
+
   cpu_sets_.resize(num_nodes_);
   cpu_sets_valid_.resize(num_nodes_);
   // Create error diagnoser.
   error_diagnoser_ = new ErrorDiag();
   if (!error_diagnoser_->set_os(this)) return false;
   return true;
-}
-
-// Machine type detected. Can we implement all these functions correctly?
-bool OsLayer::IsSupported() {
-  if (kOpenSource) {
-    // There are no explicitly supported systems in open source version.
-    return true;
-  }
-
-  // This is the default empty implementation.
-  // SAT won't report full error information.
-  return false;
 }
 
 int OsLayer::AddressMode() {
@@ -166,23 +176,19 @@ uint64 OsLayer::VirtualToPhysical(void *vaddr) {
 // Returns the HD device that contains this file.
 string OsLayer::FindFileDevice(string filename) { return "hdUnknown"; }
 
-// Returns a list of locations corresponding to HD devices.
-list<string> OsLayer::FindFileDevices() {
-  // No autodetection on unknown systems.
-  list<string> locations;
-  return locations;
-}
-
 // Get HW core features from cpuid instruction.
-void OsLayer::GetFeatures() {
+void OsLayer::GetFeatures(TestStep &setup_step) {
 #if defined(STRESSAPPTEST_CPU_X86_64) || defined(STRESSAPPTEST_CPU_I686)
   unsigned int eax = 1, ebx, ecx, edx;
   cpuid(&eax, &ebx, &ecx, &edx);
   has_clflush_ = (edx >> 19) & 1;
   has_vector_ = (edx >> 26) & 1;  // SSE2 caps bit.
 
-  logprintf(9, "Log: has clflush: %s, has sse2: %s\n",
-            has_clflush_ ? "true" : "false", has_vector_ ? "true" : "false");
+  setup_step.AddLog(
+      Log{.severity = LogSeverity::kDebug,
+          .message = absl::StrFormat("CPU %s clflush and %s sse2.",
+                                     has_clflush_ ? "has" : "does not have",
+                                     has_vector_ ? "has" : "does not have")});
 #elif defined(STRESSAPPTEST_CPU_PPC)
   // All PPC implementations have cache flush instructions.
   has_clflush_ = true;
@@ -350,7 +356,7 @@ bool OsLayer::ErrorReport(const char *part, const char *symptom, int count) {
 }
 
 // Read the number of hugepages out of the kernel interface in proc.
-int64 OsLayer::FindHugePages() {
+int64 OsLayer::FindHugePages(TestStep &test_step) {
   char buf[65] = "0";
 
   // This is a kernel interface to query the numebr of hugepages
@@ -362,16 +368,18 @@ int64 OsLayer::FindHugePages() {
   close(hpfile);
 
   if (bytes_read <= 0) {
-    logprintf(12,
-              "Log: /proc/sys/vm/nr_hugepages "
-              "read did not provide data\n");
+    test_step.AddLog(
+        Log{.severity = LogSeverity::kWarning,
+            .message = "/proc/sys/vm/nr_hugepages read did not provide data."});
     return 0;
   }
 
   if (bytes_read == 64) {
-    logprintf(0,
-              "Process Error: /proc/sys/vm/nr_hugepages "
-              "is surprisingly large\n");
+    test_step.AddLog(Log{
+        .severity = LogSeverity::kWarning,
+        .message =
+            absl::StrFormat("%s is surprisingly large.", hugepages_info_file),
+    });
     return 0;
   }
 
@@ -383,7 +391,7 @@ int64 OsLayer::FindHugePages() {
   return pages;
 }
 
-int64 OsLayer::FindFreeMemSize() {
+int64 OsLayer::FindFreeMemSize(TestStep &test_step) {
   int64 size = 0;
   int64 minsize = 0;
   if (totalmemsize_ > 0) return totalmemsize_;
@@ -395,10 +403,13 @@ int64 OsLayer::FindFreeMemSize() {
   int64 avphyssize = avpages * pagesize;
 
   // Assume 2MB hugepages.
-  int64 hugepagesize = FindHugePages() * 2 * kMegabyte;
+  int64 hugepagesize = FindHugePages(test_step) * 2 * kMegabyte;
 
   if ((pages == -1) || (pagesize == -1)) {
-    logprintf(0, "Process Error: sysconf could not determine memory size.\n");
+    test_step.AddLog(Log{
+        .severity = LogSeverity::kError,
+        .message = "Sysconf could not determine the memory size.",
+    });
     return 0;
   }
 
@@ -427,15 +438,21 @@ int64 OsLayer::FindFreeMemSize() {
       int64 totalsize = pages * pagesize;
       int64 reserve_kb = reserve_mb_ * kMegabyte;
       if (reserve_kb > totalsize) {
-        logprintf(0,
-                  "Procedural Error: %lld is bigger than the total memory "
-                  "available %lld\n",
-                  reserve_kb, totalsize);
+        test_step.AddError(Error{
+            .symptom = kProcessError,
+            .message = absl::StrFormat(
+                "Unable to reserve the requested amount of memory. %lld is "
+                "bigger than the total memory available %lld.",
+                reserve_kb, totalsize),
+        });
       } else if (reserve_kb > totalsize - minsize) {
-        logprintf(5,
-                  "Warning: Overriding memory to use: original %lld, "
-                  "current %lld\n",
-                  minsize, totalsize - reserve_kb);
+        test_step.AddLog(Log{
+            .severity = LogSeverity::kWarning,
+            .message =
+                absl::StrFormat("Overriding memory to use for test. Original "
+                                "size: %lld, Current size: %lld",
+                                minsize, totalsize - reserve_kb),
+        });
         minsize = totalsize - reserve_kb;
       }
     }
@@ -444,10 +461,13 @@ int64 OsLayer::FindFreeMemSize() {
   // Use hugepage sizing if available.
   if (hugepagesize > 0) {
     if (hugepagesize < minsize) {
-      logprintf(0,
-                "Procedural Error: Not enough hugepages. "
-                "%lldMB available < %lldMB required.\n",
-                hugepagesize / kMegabyte, minsize / kMegabyte);
+      test_step.AddError(Error{
+          .symptom = kProcessError,
+          .message = absl::StrFormat(
+              "Not enough hugepages for test. There are %lld MB available "
+              "while %lld MB are required for the test.",
+              hugepagesize / kMegabyte, minsize / kMegabyte),
+      });
       // Require the calculated minimum amount of memory.
       size = minsize;
     } else {
@@ -459,20 +479,23 @@ int64 OsLayer::FindFreeMemSize() {
     size = minsize;
   }
 
-  logprintf(5,
-            "Log: Total %lld MB. Free %lld MB. Hugepages %lld MB. "
-            "Targeting %lld MB (%lld%%)\n",
-            physsize / kMegabyte, avphyssize / kMegabyte,
-            hugepagesize / kMegabyte, size / kMegabyte, size * 100 / physsize);
+  test_step.AddLog(Log{
+      .severity = LogSeverity::kDebug,
+      .message = absl::StrFormat(
+          "Total memory: %lld MB, Free memory: %lld MB, Hugepage memory: %lld "
+          "MB. Targetting %lld MB (%lld%%) for testing.",
+          physsize / kMegabyte, avphyssize / kMegabyte,
+          hugepagesize / kMegabyte, size / kMegabyte, size * 100 / physsize),
+  });
 
   totalmemsize_ = size;
   return size;
 }
 
 // Allocates all memory available.
-int64 OsLayer::AllocateAllMem() {
-  int64 length = FindFreeMemSize();
-  bool retval = AllocateTestMem(length, 0);
+int64 OsLayer::AllocateAllMem(TestStep &test_step) {
+  int64 length = FindFreeMemSize(test_step);
+  bool retval = AllocateTestMem(length, 0, test_step);
   if (retval)
     return length;
   else
@@ -481,17 +504,19 @@ int64 OsLayer::AllocateAllMem() {
 
 // Allocate the target memory. This may be from malloc, hugepage pool
 // or other platform specific sources.
-bool OsLayer::AllocateTestMem(int64 length, uint64 paddr_base) {
+bool OsLayer::AllocateTestMem(int64 length, uint64 paddr_base,
+                              TestStep &test_step) {
   // Try hugepages first.
   void *buf = 0;
 
   sat_assert(length >= 0);
 
-  if (paddr_base)
-    logprintf(0,
-              "Process Error: non zero paddr_base %#llx is not supported,"
-              " ignore.\n",
-              paddr_base);
+  if (paddr_base) {
+    test_step.AddError(
+        Error{.symptom = kProcessError,
+              .message = absl::StrFormat(
+                  "Non zero paddr_base %#llx is not supported.", paddr_base)});
+  }
 
   // Determine optimal memory allocation path.
   bool prefer_hugepages = false;
@@ -499,20 +524,23 @@ bool OsLayer::AllocateTestMem(int64 length, uint64 paddr_base) {
   bool prefer_dynamic_mapping = false;
 
   // Are there enough hugepages?
-  int64 hugepagesize = FindHugePages() * 2 * kMegabyte;
+  int64 hugepagesize = FindHugePages(test_step) * 2 * kMegabyte;
   // TODO(nsanders): Is there enough /dev/shm? Is there enough free memeory?
   if ((length >= 1400LL * kMegabyte) && (address_mode_ == 32)) {
     prefer_dynamic_mapping = true;
     prefer_posix_shm = true;
-    logprintf(3, "Log: Prefer POSIX shared memory allocation.\n");
-    logprintf(3,
-              "Log: You may need to run "
-              "'sudo mount -o remount,size=100\% /dev/shm.'\n");
+    test_step.AddLog(Log{
+        .severity = LogSeverity::kInfo,
+        .message = "Preferring POSIX shared memory allocation. You may need to "
+                   "run `sudo mount -o remount,size=100\% /dev/shm`."});
   } else if (hugepagesize >= length) {
     prefer_hugepages = true;
-    logprintf(3, "Log: Prefer using hugepage allocation.\n");
+    test_step.AddLog(Log{.severity = LogSeverity::kInfo,
+                         .message = "Preferring hugepage memory allocation."});
   } else {
-    logprintf(3, "Log: Prefer plain malloc memory allocation.\n");
+    test_step.AddLog(
+        Log{.severity = LogSeverity::kInfo,
+            .message = "Preferring plain malloc memory allocation."});
   }
 
 #ifdef HAVE_SYS_SHM_H
@@ -526,11 +554,12 @@ bool OsLayer::AllocateTestMem(int64 length, uint64 paddr_base) {
           0) {
         int err = errno;
         string errtxt = ErrorString(err);
-        logprintf(3,
-                  "Log: failed to allocate shared hugepage "
-                  "object - err %d (%s)\n",
-                  err, errtxt.c_str());
-        logprintf(3, "Log: sysctl -w vm.nr_hugepages=XXX allows hugepages.\n");
+        test_step.AddLog(Log{.severity = LogSeverity::kInfo,
+                             .message = absl::StrFormat(
+                                 "Failed to allocate shared hugepage object - "
+                                 "error code %d (%s). Use `sysctl -w "
+                                 "vm.nr_hugepages=XXX` to allow hugepages.",
+                                 err, errtxt)});
         break;
       }
 
@@ -538,25 +567,29 @@ bool OsLayer::AllocateTestMem(int64 length, uint64 paddr_base) {
       if (shmaddr == reinterpret_cast<void *>(-1)) {
         int err = errno;
         string errtxt = ErrorString(err);
-        logprintf(0,
-                  "Log: failed to attach shared "
-                  "hugepage object - err %d (%s).\n",
-                  err, errtxt.c_str());
+        test_step.AddLog(
+            Log{.severity = LogSeverity::kInfo,
+                .message = absl::StrFormat("Failed to attach shared hugepage "
+                                           "object - error code %d (%s).",
+                                           err, errtxt)});
         if (shmctl(shmid, IPC_RMID, NULL) < 0) {
           int err = errno;
           string errtxt = ErrorString(err);
-          logprintf(0,
-                    "Log: failed to remove shared "
-                    "hugepage object - err %d (%s).\n",
-                    err, errtxt.c_str());
+          test_step.AddLog(
+              Log{.severity = LogSeverity::kInfo,
+                  .message = absl::StrFormat("Failed to remove shared hugepage "
+                                             "object - error code %d (%s).",
+                                             err, errtxt)});
         }
         break;
       }
       use_hugepages_ = true;
       shmid_ = shmid;
       buf = shmaddr;
-      logprintf(0, "Log: Using shared hugepage object 0x%x at %p.\n", shmid,
-                shmaddr);
+      test_step.AddLog(
+          Log{.severity = LogSeverity::kInfo,
+              .message = absl::StrFormat(
+                  "Using shared hugepage object 0x%x at %p.", shmid, shmaddr)});
     } while (0);
   }
 
@@ -569,20 +602,22 @@ bool OsLayer::AllocateTestMem(int64 length, uint64 paddr_base) {
       if (shm_object < 0) {
         int err = errno;
         string errtxt = ErrorString(err);
-        logprintf(3,
-                  "Log: failed to allocate shared "
-                  "smallpage object - err %d (%s)\n",
-                  err, errtxt.c_str());
+        test_step.AddLog(Log{
+            .severity = LogSeverity::kInfo,
+            .message = absl::StrFormat("Failed to allocate shared smallpage "
+                                       "object - error code %d (%s).",
+                                       err, errtxt)});
         break;
       }
 
       if (0 > ftruncate(shm_object, length)) {
         int err = errno;
         string errtxt = ErrorString(err);
-        logprintf(3,
-                  "Log: failed to ftruncate shared "
-                  "smallpage object - err %d (%s)\n",
-                  err, errtxt.c_str());
+        test_step.AddLog(Log{
+            .severity = LogSeverity::kInfo,
+            .message = absl::StrFormat("Failed to ftruncate shared smallpage "
+                                       "object - error code %d (%s).",
+                                       err, errtxt)});
         break;
       }
 
@@ -599,10 +634,11 @@ bool OsLayer::AllocateTestMem(int64 length, uint64 paddr_base) {
         if (shmaddr == reinterpret_cast<void *>(-1)) {
           int err = errno;
           string errtxt = ErrorString(err);
-          logprintf(0,
-                    "Log: failed to map shared "
-                    "smallpage object - err %d (%s).\n",
-                    err, errtxt.c_str());
+          test_step.AddLog(Log{
+              .severity = LogSeverity::kInfo,
+              .message = absl::StrFormat(
+                  "Failed to map shared smallpage object - error code %d (%s).",
+                  err, errtxt)});
           break;
         }
       }
@@ -616,8 +652,10 @@ bool OsLayer::AllocateTestMem(int64 length, uint64 paddr_base) {
       } else {
         sprintf(location_message, "at %p", shmaddr);
       }
-      logprintf(0, "Log: Using posix shared memory object 0x%x %s.\n",
-                shm_object, location_message);
+      test_step.AddLog(Log{.severity = LogSeverity::kInfo,
+                           .message = absl::StrFormat(
+                               "Using POSIX shared memory object 0x%x, %s.",
+                               shm_object, location_message)});
     } while (0);
     shm_unlink("/stressapptest");
   }
@@ -632,7 +670,9 @@ bool OsLayer::AllocateTestMem(int64 length, uint64 paddr_base) {
       if (map_buf != MAP_FAILED) {
         buf = map_buf;
         mmapped_allocation_ = true;
-        logprintf(0, "Log: Using mmap() allocation at %p.\n", buf);
+        test_step.AddLog(Log{
+            .severity = LogSeverity::kInfo,
+            .message = absl::StrFormat("Using mmap allocation at %p.", buf)});
       }
     }
     if (!mmapped_allocation_) {
@@ -640,13 +680,17 @@ bool OsLayer::AllocateTestMem(int64 length, uint64 paddr_base) {
       // IO.
       buf = static_cast<char *>(memalign(4096, length));
       if (buf) {
-        logprintf(0, "Log: Using memaligned allocation at %p.\n", buf);
+        test_step.AddLog(Log{.severity = LogSeverity::kInfo,
+                             .message = absl::StrFormat(
+                                 "Using memaligned allocation at %p.", buf)});
       } else {
-        logprintf(0, "Process Error: memalign returned 0\n");
+        test_step.AddLog(Log{.severity = LogSeverity::kWarning,
+                             .message = "Memalign returned 0."});
         if ((length >= 1499LL * kMegabyte) && (address_mode_ == 32)) {
-          logprintf(0,
-                    "Log: You are trying to allocate > 1.4G on a 32 "
-                    "bit process. Please setup shared memory.\n");
+          test_step.AddLog(
+              Log{.severity = LogSeverity::kWarning,
+                  .message = "You are trying to allocate more than 1.4 GB on a "
+                             "32 bit process. Please setup shared memory."});
         }
       }
     }

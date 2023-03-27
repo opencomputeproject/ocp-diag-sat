@@ -54,7 +54,6 @@ using ::ocpdiag::results::TestStep;
 
 // stressapptest versioning here.
 static const char *kVersion = "1.0.0";
-static const char *kProcessError = "sat-process-error";
 
 // Global stressapptest reference, for use by signal handler.
 // This makes Sat objects not safe for multiple instances.
@@ -104,20 +103,22 @@ bool Sat::InitializeLogfile() {
 
 // Check that the environment is known and safe to run on.
 // Return 1 if good, 0 if unsuppported.
-bool Sat::CheckEnvironment() {
+bool Sat::CheckEnvironment(TestStep &setup_step) {
   // Check that this is not a debug build. Debug builds lack
   // enough performance to stress the system.
 #if !defined NDEBUG
   if (run_on_anything_) {
-    logprintf(1,
-              "Log: Running DEBUG version of SAT, "
-              "with significantly reduced coverage.\n");
+    setup_step.AddLog(Log{
+        .severity = LogSeverity::kWarning,
+        .message =
+            "Running the DEBUG version of SAT. This will significantly reduce "
+            "the test's coverage. Do you have the right compiler flags set?"});
   } else {
-    logprintf(0,
-              "Process Error: Running DEBUG version of SAT, "
-              "with significantly reduced coverage.\n");
-    logprintf(0, "Log: Command line option '-A' bypasses this error.\n");
-    bad_status();
+    setup_step.AddError(
+        Error{.symptom = kProcessError,
+              .message = "Running the DEBUG version of SAT, which will "
+                         "significantly reduce the test's coverage. This error "
+                         "can be bypassed with the -A command line flag"});
     return false;
   }
 #elif !defined CHECKOPTS
@@ -126,23 +127,19 @@ bool Sat::CheckEnvironment() {
 
   // Check if the cpu frequency test is enabled and able to run.
   if (cpu_freq_test_) {
-    if (!CpuFreqThread::CanRun()) {
-      logprintf(0,
-                "Process Error: This platform does not support this "
-                "test.\n");
-      bad_status();
+    if (!CpuFreqThread::CanRun(setup_step)) {
       return false;
     } else if (cpu_freq_threshold_ <= 0) {
-      logprintf(0,
-                "Process Error: The cpu frequency test requires "
-                "--cpu_freq_threshold set to a value > 0\n");
-      bad_status();
+      setup_step.AddError(
+          Error{.symptom = kProcessError,
+                .message = "The CPU frequency test requires "
+                           "--cpu_freq_threshold be set to a positive value."});
       return false;
     } else if (cpu_freq_round_ < 0) {
-      logprintf(0,
-                "Process Error: The --cpu_freq_round option must be greater"
-                " than or equal to zero. A value of zero means no rounding.\n");
-      bad_status();
+      setup_step.AddError(Error{
+          .symptom = kProcessError,
+          .message = "The --cpu_freq_round option must be greater than or "
+                     "equal to zero. A value of zero means no rounding."});
       return false;
     }
   }
@@ -150,45 +147,32 @@ bool Sat::CheckEnvironment() {
   // Use all CPUs if nothing is specified.
   if (memory_threads_ == -1) {
     memory_threads_ = os_->num_cpus();
-    logprintf(7, "Log: Defaulting to %d copy threads\n", memory_threads_);
+    setup_step.AddLog(Log{
+        .severity = LogSeverity::kDebug,
+        .message = absl::StrFormat(
+            "Defaulting to using %d memory copy threads (same number as there "
+            "are CPU cores)",
+            memory_threads_)});
   }
 
   // Use all memory if no size is specified.
-  if (size_mb_ == 0) size_mb_ = os_->FindFreeMemSize() / kMegabyte;
+  if (size_mb_ == 0) size_mb_ = os_->FindFreeMemSize(setup_step) / kMegabyte;
   size_ = static_cast<int64>(size_mb_) * kMegabyte;
-
-  // Autodetect file locations.
-  if (findfiles_ && (file_threads_ == 0)) {
-    // Get a space separated sting of disk locations.
-    list<string> locations = os_->FindFileDevices();
-
-    // Extract each one.
-    while (!locations.empty()) {
-      // Copy and remove the disk name.
-      string disk = locations.back();
-      locations.pop_back();
-
-      logprintf(12, "Log: disk at %s\n", disk.c_str());
-      file_threads_++;
-      filename_.push_back(disk + "/sat_disk.a");
-      file_threads_++;
-      filename_.push_back(disk + "/sat_disk.b");
-    }
-  }
 
   // We'd better have some memory by this point.
   if (size_ < 1) {
-    logprintf(0, "Process Error: No memory found to test.\n");
-    bad_status();
+    setup_step.AddError(
+        Error{.symptom = kProcessError,
+              .message = "No memory found to test on the system."});
     return false;
   }
 
   if (tag_mode_ &&
       ((file_threads_ > 0) || (disk_threads_ > 0) || (net_threads_ > 0))) {
-    logprintf(0,
-              "Process Error: Memory tag mode incompatible "
-              "with disk/network DMA.\n");
-    bad_status();
+    setup_step.AddError(Error{
+        .symptom = kProcessError,
+        .message =
+            "Memory tag mode is incompatible with disk and network testing."});
     return false;
   }
 
@@ -196,52 +180,45 @@ bool Sat::CheckEnvironment() {
   if (address_mode_ == 32) {
     size_mb_ = (size_mb_ / 4) * 4;
     size_ = size_mb_ * kMegabyte;
-    logprintf(1, "Log: Flooring memory allocation to multiple of 4: %lldMB\n",
-              size_mb_);
-  }
-
-  // Check if this system is on the whitelist for supported systems.
-  if (!os_->IsSupported()) {
-    if (run_on_anything_) {
-      logprintf(1, "Log: Unsupported system. Running with reduced coverage.\n");
-      // This is ok, continue on.
-    } else {
-      logprintf(0,
-                "Process Error: Unsupported system, "
-                "no error reporting available\n");
-      logprintf(0, "Log: Command line option '-A' bypasses this error.\n");
-      bad_status();
-      return false;
-    }
+    setup_step.AddLog(
+        Log{.severity = LogSeverity::kDebug,
+            .message = absl::StrFormat(
+                "Flooring memory allocation to a multiple of 4: %lld MB",
+                size_mb_)});
   }
 
   return true;
 }
 
 // Allocates memory to run the test on
-bool Sat::AllocateMemory() {
+bool Sat::AllocateMemory(TestStep &setup_step) {
   // Allocate our test memory.
-  bool result = os_->AllocateTestMem(size_, paddr_base_);
+  bool result = os_->AllocateTestMem(size_, paddr_base_, setup_step);
   if (!result) {
-    logprintf(0, "Process Error: failed to allocate memory\n");
-    bad_status();
+    setup_step.AddError(
+        {Error{.symptom = kProcessError,
+               .message = "Failed to allocate memory for test."}});
     return false;
   }
   return true;
 }
 
 // Sets up access to data patterns
-bool Sat::InitializePatterns() {
+bool Sat::InitializePatterns(TestStep &setup_step) {
   // Initialize pattern data.
   patternlist_ = new PatternList();
   if (!patternlist_) {
-    logprintf(0, "Process Error: failed to allocate patterns\n");
-    bad_status();
+    setup_step.AddError(Error{
+        .symptom = kProcessError,
+        .message = "Failed to allocate memory patterns.",
+    });
     return false;
   }
   if (!patternlist_->Initialize()) {
-    logprintf(0, "Process Error: failed to initialize patternlist\n");
-    bad_status();
+    setup_step.AddError(Error{
+        .symptom = kProcessError,
+        .message = "Failed to initialize memory pattern list.",
+    });
     return false;
   }
   return true;
@@ -319,12 +296,12 @@ bool Sat::PutEmpty(struct page_entry *pe) {
 
 // Set up the bitmap of physical pages in case we want to see which pages were
 // accessed under this run of SAT.
-void Sat::AddrMapInit() {
+void Sat::AddrMapInit(TestStep &fill_step) {
   if (!do_page_map_) return;
   // Find about how much physical mem is in the system.
   // TODO(nsanders): Find some way to get the max
   // and min phys addr in the system.
-  uint64 maxsize = os_->FindFreeMemSize() * 4;
+  uint64 maxsize = os_->FindFreeMemSize(fill_step) * 4;
   sat_assert(maxsize != 0);
 
   // Make a bitmask of this many pages. Assume that the memory is relatively
@@ -355,6 +332,7 @@ void Sat::AddrMapUpdate(struct page_entry *pe) {
     uint32 offset = paddr / 4096 / 8;
     unsigned char mask = 1 << ((paddr / 4096) % 8);
 
+    // TODO(dthawkes) Convert this to a test step error
     if (offset >= arraysize) {
       logprintf(0,
                 "Process Error: Physical address %#llx is "
@@ -546,7 +524,7 @@ bool Sat::InitializePages() {
       Log{.severity = LogSeverity::kDebug,
           .message = "Done filling memory pages. Starting to allocate pages."});
 
-  AddrMapInit();
+  AddrMapInit(*fill_step);
 
   // Initialize page locations.
   for (int64 i = 0; i < pages_; i++) {
@@ -629,59 +607,71 @@ bool Sat::Initialize() {
   auto setup_step =
       std::make_unique<TestStep>("Setup and Check Environment", *test_run_);
 
-  std::map<std::string, std::string> options;
-
-  GoogleOsOptions(&options);
-
   // Initialize OS/Hardware interface.
+  std::map<std::string, std::string> options;
   os_ = OsLayerFactory(options);
   if (!os_) {
-    bad_status();
+    setup_step->AddError(Error{.symptom = kProcessError,
+                               .message = "Failed to allocate OS interface."});
     return false;
   }
 
+  // Populate OS parameters
   if (min_hugepages_mbytes_ > 0)
     os_->SetMinimumHugepagesSize(min_hugepages_mbytes_ * kMegabyte);
 
   if (reserve_mb_ > 0) os_->SetReserveSize(reserve_mb_);
 
   if (channels_.size() > 0) {
-    logprintf(6,
-              "Log: Decoding memory: %dx%d bit channels,"
-              "%d modules per channel (x%d), decoding hash 0x%x\n",
-              channels_.size(), channel_width_, channels_[0].size(),
-              channel_width_ / channels_[0].size(), channel_hash_);
+    setup_step->AddLog(
+        Log{.severity = LogSeverity::kDebug,
+            .message = absl::StrFormat(
+                "Decoding memory: %dx%d bit channels, %d modules per "
+                "channel (x%d), decoding hash 0x%x",
+                channels_.size(), channel_width_, channels_[0].size(),
+                channel_width_ / channels_[0].size(), channel_hash_)});
     os_->SetDramMappingParams(channel_hash_, channel_width_, &channels_);
   }
 
-  if (!os_->Initialize()) {
-    logprintf(0, "Process Error: Failed to initialize OS layer\n");
-    bad_status();
+  if (!os_->Initialize(*setup_step)) {
+    setup_step->AddError(
+        Error{.symptom = kProcessError,
+              .message = "Failed to initialize OS interface."});
     delete os_;
     return false;
   }
 
   // Checks that OS/Build/Platform is supported.
-  if (!CheckEnvironment()) return false;
+  if (!CheckEnvironment(*setup_step)) return false;
 
-  if (error_injection_) os_->set_error_injection(true);
+  os_->set_error_injection(error_injection_);
 
   // Run SAT in monitor only mode, do not continue to allocate resources.
   if (monitor_mode_) {
-    logprintf(5,
-              "Log: Running in monitor-only mode. "
-              "Will not allocate any memory nor run any stress test. "
-              "Only polling ECC errors.\n");
+    setup_step->AddLog(Log{
+        .severity = LogSeverity::kInfo,
+        .message = "Running in monitor-only mode. THe test will not allocated "
+                   "any memory or run any stress testing. It will only poll "
+                   "for ECC errors.",
+    });
     return true;
   }
 
   // Allocate the memory to test.
-  if (!AllocateMemory()) return false;
+  if (!AllocateMemory(*setup_step)) return false;
 
-  logprintf(5, "Stats: Starting SAT, %dM, %d seconds\n",
-            static_cast<int>(size_ / kMegabyte), runtime_seconds_);
+  setup_step->AddMeasurement(Measurement{
+      .name = "Memory to Test",
+      .unit = "MB",
+      .value = static_cast<double>(size_ / kMegabyte),
+  });
+  setup_step->AddMeasurement(Measurement{
+      .name = "Test Run Time",
+      .unit = "s",
+      .value = static_cast<double>(runtime_seconds_),
+  });
 
-  if (!InitializePatterns()) return false;
+  if (!InitializePatterns(*setup_step)) return false;
 
   // Initialize memory allocation.
   pages_ = size_ / page_length_;
@@ -700,10 +690,7 @@ bool Sat::Initialize() {
 
   setup_step.reset();
 
-  if (!InitializePages()) {
-    logprintf(0, "Process Error: Initialize Pages failed\n");
-    return false;
-  }
+  if (!InitializePages()) return false;
 
   return true;
 }
@@ -742,7 +729,6 @@ Sat::Sat() {
   max_errorcount_ = 0;  // Zero means no early exit.
   stop_on_error_ = false;
   error_poll_ = true;
-  findfiles_ = false;
 
   do_page_map_ = false;
   page_bitmap_ = 0;
@@ -919,9 +905,6 @@ bool Sat::ParseArgs(int argc, const char **argv) {
     ARG_KVALUE("--no_affinity", use_affinity_, false);
     ARG_KVALUE("--local_numa", region_mode_, kLocalNuma);
     ARG_KVALUE("--remote_numa", region_mode_, kRemoteNuma);
-
-    // Autodetect tempfile locations.
-    ARG_KVALUE("--findfiles", findfiles_, 1);
 
     // Inject errors to force miscompare code paths
     ARG_KVALUE("--force_errors", error_injection_, true);
@@ -1146,7 +1129,6 @@ void Sat::PrintHelp() {
       " -m threads       number of memory copy threads to run\n"
       " -i threads       number of memory invert threads to run\n"
       " -C threads       number of memory CPU stress threads to run\n"
-      " --findfiles      find locations to do disk IO automatically\n"
       " -d device        add a direct write disk thread with block "
       "device (or file) 'device'\n"
       " -f filename      add a disk thread with "
@@ -1212,10 +1194,6 @@ void Sat::PrintHelp() {
       " --memory_channel u1,u2   defines a comma-separated list of names "
       "for dram packages in a memory channel. Use multiple times to "
       "define multiple channels.\n");
-}
-
-void Sat::GoogleOsOptions(std::map<std::string, std::string> *options) {
-  // Do nothing, no OS-specific argument on public stressapptest
 }
 
 // Launch the SAT task threads. Returns 0 on error.
@@ -1962,8 +1940,9 @@ namespace {
 // Calculates the next time an action in Sat::Run() should occur, based on a
 // schedule derived from a start point and a regular frequency.
 //
-// Using frequencies instead of intervals with their accompanying drift allows
-// users to better predict when the actions will occur throughout a run.
+// Using frequencies instead of intervals with their accompanying drift
+// allows users to better predict when the actions will occur throughout a
+// run.
 //
 // Arguments:
 //   frequency: seconds
@@ -1990,14 +1969,14 @@ bool Sat::Run() {
   //
   // 2) (POSIX) After the value of a variable is changed in one thread,
   // another
-  //    thread is only guaranteed to see the new value after both threads have
-  //    acquired or released the same mutex or rwlock, synchronized to the
-  //    same barrier, or similar.
+  //    thread is only guaranteed to see the new value after both threads
+  //    have acquired or released the same mutex or rwlock, synchronized to
+  //    the same barrier, or similar.
   //
-  // #1 prevents the use of #2 in a signal handler, so the signal handler must
-  // be called in the same thread that reads the "volatile sig_atomic_t"
-  // variable it sets.  We enforce that by blocking the signals in question in
-  // the worker threads, forcing them to be handled by this thread.
+  // #1 prevents the use of #2 in a signal handler, so the signal handler
+  // must be called in the same thread that reads the "volatile sig_atomic_t"
+  // variable it sets.  We enforce that by blocking the signals in question
+  // in the worker threads, forcing them to be handled by this thread.
   logprintf(12, "Log: Installing signal handlers\n");
   sigset_t new_blocked_signals;
   sigemptyset(&new_blocked_signals);
