@@ -56,8 +56,10 @@
 #include "sattypes.h"  // NOLINT
 #include "worker.h"    // NOLINT
 
+using ::ocpdiag::results::Error;
 using ::ocpdiag::results::Log;
 using ::ocpdiag::results::LogSeverity;
+using ::ocpdiag::results::TestStep;
 
 // Syscalls
 // Why ubuntu, do you hate gettid so bad?
@@ -3548,7 +3550,7 @@ bool CpuFreqThread::GetMsrs(int cpu, CpuDataType *data) {
 
 // Returns true if this test can run on the current machine. Otherwise,
 // returns false.
-bool CpuFreqThread::CanRun() {
+bool CpuFreqThread::CanRun(TestStep &test_step) {
 #if defined(STRESSAPPTEST_CPU_X86_64) || defined(STRESSAPPTEST_CPU_I686)
   unsigned int eax, ebx, ecx, edx;
 
@@ -3557,7 +3559,11 @@ bool CpuFreqThread::CanRun() {
   eax = 1;
   cpuid(&eax, &ebx, &ecx, &edx);
   if (!(edx & (1 << 5))) {
-    logprintf(0, "Process Error: No TSC support.\n");
+    test_step.AddError(Error{
+        .symptom = kProcessError,
+        .message =
+            "Cannot run CPU frequency test. Platform does not support TCS.",
+    });
     return false;
   }
 
@@ -3566,7 +3572,11 @@ bool CpuFreqThread::CanRun() {
   eax = 0x80000000;
   cpuid(&eax, &ebx, &ecx, &edx);
   if (eax < 0x80000007) {
-    logprintf(0, "Process Error: No invariant TSC support.\n");
+    test_step.AddError(Error{
+        .symptom = kProcessError,
+        .message = "Cannot run CPU frequency test. Platform does not support "
+                   "invariant TCS.",
+    });
     return false;
   }
 
@@ -3575,7 +3585,11 @@ bool CpuFreqThread::CanRun() {
   eax = 0x80000007;
   cpuid(&eax, &ebx, &ecx, &edx);
   if ((edx & (1 << 8)) == 0) {
-    logprintf(0, "Process Error: No non-stop TSC support.\n");
+    test_step.AddError(Error{
+        .symptom = kProcessError,
+        .message = "Cannot run CPU frequency test. Platform does not support "
+                   "non-stop TCS.",
+    });
     return false;
   }
 
@@ -3584,14 +3598,20 @@ bool CpuFreqThread::CanRun() {
   eax = 0x6;
   cpuid(&eax, &ebx, &ecx, &edx);
   if ((ecx & 1) == 0) {
-    logprintf(0, "Process Error: No APERF MSR support.\n");
+    test_step.AddError(Error{
+        .symptom = kProcessError,
+        .message = "Cannot run CPU frequency test. Platform does not support "
+                   "APERF MSR.",
+    });
     return false;
   }
   return true;
 #else
-  logprintf(0,
-            "Process Error: "
-            "cpu_freq_test is only supported on X86 processors.\n");
+  test_step.AddError(Error{
+      .symptom = kProcessError,
+      .message =
+          "Cannot run CPU frequency test. Only supported on x86 platforms.",
+  });
   return false;
 #endif
 }

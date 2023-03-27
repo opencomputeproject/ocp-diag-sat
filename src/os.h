@@ -21,7 +21,8 @@
 // so these includes are correct.
 #include "adler32memcpy.h"  // NOLINT
 #include "clock.h"          // NOLINT
-#include "sattypes.h"       // NOLINT
+#include "ocpdiag/core/results/test_step.h"
+#include "sattypes.h"  // NOLINT
 
 #if defined(STRESSAPPTEST_CPU_X86_64) || defined(STRESSAPPTEST_CPU_I686)
 #include <immintrin.h>
@@ -76,7 +77,7 @@ class OsLayer {
 
   // Initializes data strctures and open files.
   // Returns false on error.
-  virtual bool Initialize();
+  virtual bool Initialize(ocpdiag::results::TestStep &TestStep);
 
   // Virtual to physical. This implementation is optional for
   // subclasses to implement.
@@ -288,7 +289,7 @@ class OsLayer {
   }
 
   // Find the free memory on the machine.
-  virtual int64 FindFreeMemSize();
+  virtual int64 FindFreeMemSize(ocpdiag::results::TestStep &test_step);
 
   // Allocates test memory of length bytes.
   // Subclasses must implement this.
@@ -310,7 +311,7 @@ class OsLayer {
   // Returns 32 for 32-bit, 64 for 64-bit.
   virtual int AddressMode();
   // Update OsLayer state regarding cpu support for various features.
-  virtual void GetFeatures();
+  virtual void GetFeatures(ocpdiag::results::TestStep &setup_step);
 
   // Open, read, write pci cfg through /proc/bus/pci. fd is /proc/pci file.
   virtual int PciOpen(int bus, int device, int function);
@@ -405,7 +406,7 @@ class OsLayer {
   virtual int OpenMSR(uint32 core, uint32 address);
 
   // Look up how many hugepages there are.
-  virtual int64 FindHugePages();
+  virtual int64 FindHugePages(ocpdiag::results::TestStep &test_step);
 
   // Link to find last transaction at an error location.
   ErrCallback err_log_callback_;

@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/strings/string_view.h"
 #include "finelock_queue.h"
 #include "ocpdiag/core/results/test_run.h"
 #include "ocpdiag/core/results/test_step.h"
@@ -23,6 +24,8 @@
 #include "queue.h"
 #include "sattypes.h"
 #include "worker.h"
+
+constexpr char kProcessError[] = "sat-process-error";
 
 // SAT stress test class.
 class Sat {
@@ -105,7 +108,7 @@ class Sat {
   // Opens log file for writing. Returns 0 on failure.
   bool InitializeLogfile();
   // Checks for supported environment. Returns 0 on failure.
-  bool CheckEnvironment();
+  bool CheckEnvironment(ocpdiag::results::TestStep &setup_step);
   // Allocates size_ bytes of test memory.
   bool AllocateMemory();
   // Initializes datapattern reference structures.
@@ -304,8 +307,6 @@ class Sat {
 
   // additional memory data from google-specific tests.
   virtual void GoogleMemoryStats(float *memcopy_data, float *memcopy_bandwidth);
-
-  virtual void GoogleOsOptions(std::map<std::string, std::string> *options);
 
   // Page queues, only one of (valid_+empty_) or (finelock_q_) will be used
   // at a time. A commandline switch controls which queue implementation will

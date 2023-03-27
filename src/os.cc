@@ -37,9 +37,17 @@
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
+#include "absl/strings/str_format.h"
 #include "clock.h"
 #include "error_diag.h"
+#include "ocpdiag/core/results/data_model/input_model.h"
+#include "ocpdiag/core/results/test_step.h"
 #include "sattypes.h"
+
+using ::ocpdiag::results::Log;
+using ::ocpdiag::results::LogSeverity;
+using ::ocpdiag::results::Measurement;
+using ::ocpdiag::results::TestStep;
 
 // OsLayer initialization.
 OsLayer::OsLayer() {
@@ -85,21 +93,32 @@ OsLayer::~OsLayer() {
 }
 
 // OsLayer initialization.
-bool OsLayer::Initialize() {
+bool OsLayer::Initialize(TestStep &setup_step) {
   if (!clock_) {
     clock_ = new Clock();
   }
 
   time_initialized_ = clock_->Now();
   // Detect asm support.
-  GetFeatures();
+  GetFeatures(setup_step);
 
   if (num_cpus_ == 0) {
     num_nodes_ = 1;
     num_cpus_ = sysconf(_SC_NPROCESSORS_ONLN);
     num_cpus_per_node_ = num_cpus_ / num_nodes_;
   }
-  logprintf(5, "Log: %d nodes, %d cpus.\n", num_nodes_, num_cpus_);
+
+  setup_step.AddMeasurement(Measurement{
+      .name = "CPU Core Count",
+      .unit = "cores",
+      .value = static_cast<double>(num_cpus_),
+  });
+  setup_step.AddMeasurement(Measurement{
+      .name = "Node Count",
+      .unit = "nodes",
+      .value = static_cast<double>(num_nodes_),
+  });
+
   cpu_sets_.resize(num_nodes_);
   cpu_sets_valid_.resize(num_nodes_);
   // Create error diagnoser.
@@ -174,15 +193,18 @@ list<string> OsLayer::FindFileDevices() {
 }
 
 // Get HW core features from cpuid instruction.
-void OsLayer::GetFeatures() {
+void OsLayer::GetFeatures(TestStep &setup_step) {
 #if defined(STRESSAPPTEST_CPU_X86_64) || defined(STRESSAPPTEST_CPU_I686)
   unsigned int eax = 1, ebx, ecx, edx;
   cpuid(&eax, &ebx, &ecx, &edx);
   has_clflush_ = (edx >> 19) & 1;
   has_vector_ = (edx >> 26) & 1;  // SSE2 caps bit.
 
-  logprintf(9, "Log: has clflush: %s, has sse2: %s\n",
-            has_clflush_ ? "true" : "false", has_vector_ ? "true" : "false");
+  setup_step.AddLog(
+      Log{.severity = LogSeverity::kDebug,
+          .message = absl::StrFormat("CPU %s clflush and %s sse2.",
+                                     has_clflush_ ? "has" : "does not have",
+                                     has_vector_ ? "has" : "does not have")});
 #elif defined(STRESSAPPTEST_CPU_PPC)
   // All PPC implementations have cache flush instructions.
   has_clflush_ = true;
@@ -350,7 +372,7 @@ bool OsLayer::ErrorReport(const char *part, const char *symptom, int count) {
 }
 
 // Read the number of hugepages out of the kernel interface in proc.
-int64 OsLayer::FindHugePages() {
+int64 OsLayer::FindHugePages(TestStep &test_step) {
   char buf[65] = "0";
 
   // This is a kernel interface to query the numebr of hugepages
@@ -362,7 +384,7 @@ int64 OsLayer::FindHugePages() {
   close(hpfile);
 
   if (bytes_read <= 0) {
-    logprintf(12,
+        logprintf(12,
               "Log: /proc/sys/vm/nr_hugepages "
               "read did not provide data\n");
     return 0;
@@ -383,7 +405,7 @@ int64 OsLayer::FindHugePages() {
   return pages;
 }
 
-int64 OsLayer::FindFreeMemSize() {
+int64 OsLayer::FindFreeMemSize(TestStep &test_step) {
   int64 size = 0;
   int64 minsize = 0;
   if (totalmemsize_ > 0) return totalmemsize_;
