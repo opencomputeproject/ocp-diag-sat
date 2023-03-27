@@ -18,15 +18,10 @@
 #include <algorithm>
 #include <string>
 
-#ifdef HAVE_CONFIG_H  // Built using autoconf
-#ifdef __ANDROID__
-#include "stressapptest_config_android.h"  // NOLINT
-#else
 #include "stressapptest_config.h"  // NOLINT
 #ifndef _LIBCPP_VERSION
 using namespace __gnu_cxx;  // NOLINT
-#endif  // _LIBCPP_VERSION
-#endif  // __ANDROID__
+#endif                      // _LIBCPP_VERSION
 using namespace std;
 
 typedef signed long long int64;
@@ -48,10 +43,6 @@ inline const char *Timestamp() { return STRESSAPPTEST_TIMESTAMP; }
 inline const char *BuildChangelist() { return "open source release"; }
 
 static const bool kOpenSource = true;
-#else                        // !HAVE_CONFIG_H
-static const bool kOpenSource = false;
-#include "googlesattypes.h"  // NOLINT
-#endif                       // HAVE_CONFIG_H
 // Workaround to allow 32/64 bit conversion
 // without running into strict aliasing problems.
 union datacast_t {
