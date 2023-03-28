@@ -12,12 +12,12 @@
 #include <signal.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
-// This file must work with autoconf on its public version,
-// so these includes are correct.
 #include "finelock_queue.h"
+#include "ocpdiag/core/results/test_run.h"
 #include "os.h"
 #include "queue.h"
 #include "sattypes.h"
@@ -33,8 +33,7 @@ class Sat {
   virtual ~Sat();
 
   // Read configuration from arguments. Called first.
-  bool ParseArgs(int argc, char **argv);
-  virtual bool CheckGoogleSpecificArgs(int argc, char **argv, int *i);
+  bool ParseArgs(int argc, const char **argv);
   // Initialize data structures, subclasses, and resources,
   // based on command line args.
   // Called after ParseArgs().
@@ -135,6 +134,7 @@ class Sat {
 
   // Command line arguments.
   string cmdline_;
+  string cmdline_json_;
 
   // Memory and test configuration.
   int runtime_seconds_;               // Seconds to run.
@@ -313,6 +313,8 @@ class Sat {
   class PageEntryQueue *empty_;        // Page queue structure, free pages.
   class FineLockPEQueue *finelock_q_;  // Page queue with fine-grain locks
   Sat::PageQueueType pe_q_implementation_;  // Queue implementation switch
+
+  std::unique_ptr<ocpdiag::results::TestRun> test_run_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(Sat);
 };
