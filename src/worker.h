@@ -29,6 +29,7 @@
 // This file must work with autoconf on its public version,
 // so these includes are correct.
 #include "disk_blocks.h"
+#include "ocpdiag/core/results/test_step.h"
 #include "queue.h"
 #include "sattypes.h"
 
@@ -204,7 +205,8 @@ class WorkerThread {
   virtual void InitThread(int thread_num_init, class Sat *sat_init,
                           class OsLayer *os_init,
                           class PatternList *patternlist_init,
-                          WorkerStatus *worker_status);
+                          WorkerStatus *worker_status,
+                          ocpdiag::results::TestStep *test_step);
 
   // This function is DEPRECATED, it does nothing.
   void SetPriority(Priority priority) { priority_ = priority; }
@@ -364,6 +366,8 @@ class WorkerThread {
   class Sat *sat_;                  // Reference to parent stest object.
   class OsLayer *os_;               // Os abstraction: put hacks here.
   class PatternList *patternlist_;  // Reference to data patterns.
+
+  ocpdiag::results::TestStep *test_step_;  // The OCP diag test step.
 
   // Work around style guide ban on sizeof(int).
   static const uint64 iamint_ = 0;

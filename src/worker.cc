@@ -270,10 +270,12 @@ NetworkListenThread::NetworkListenThread() {}
 void WorkerThread::InitThread(int thread_num_init, class Sat *sat_init,
                               class OsLayer *os_init,
                               class PatternList *patternlist_init,
-                              WorkerStatus *worker_status) {
+                              WorkerStatus *worker_status,
+                              ocpdiag::results::TestStep *test_step) {
   sat_assert(worker_status);
   worker_status->AddWorkers(1);
 
+  test_step_ = test_step;
   thread_num_ = thread_num_init;
   sat_ = sat_init;
   os_ = os_init;
@@ -2189,7 +2191,7 @@ bool NetworkListenThread::SpawnSlave(int newsock, int threadid) {
   ChildWorker *child_worker = new ChildWorker;
   child_worker->thread.SetSock(newsock);
   child_worker->thread.InitThread(threadid, sat_, os_, patternlist_,
-                                  &child_worker->status);
+                                  &child_worker->status, test_step_);
   child_worker->status.Initialize();
   child_worker->thread.SpawnThread();
   child_workers_.push_back(child_worker);

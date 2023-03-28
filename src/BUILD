@@ -37,6 +37,8 @@ cc_library(
     ],
     deps = [
         "@ocp_diag_core//ocpdiag/core/results:test_run",
+        "@ocp_diag_core//ocpdiag/core/results:test_step",
+        "@ocp_diag_core//ocpdiag/core/results/data_model:dut_info",
         "@ocp_diag_core//ocpdiag/core/results/data_model:input_model",
         "@ocp_diag_core//ocpdiag/core/results/data_model:input_model_helpers",
     ],
