@@ -34,6 +34,7 @@
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
+#include "absl/strings/str_format.h"
 #include "disk_blocks.h"
 #include "logger.h"
 #include "ocpdiag/core/results/data_model/dut_info.h"
@@ -45,10 +46,15 @@
 #include "sattypes.h"
 #include "worker.h"
 
+using ::ocpdiag::results::Error;
+using ::ocpdiag::results::Log;
+using ::ocpdiag::results::LogSeverity;
+using ::ocpdiag::results::Measurement;
 using ::ocpdiag::results::TestStep;
 
 // stressapptest versioning here.
 static const char *kVersion = "1.0.0";
+static const char *kProcessError = "sat-process-error";
 
 // Global stressapptest reference, for use by signal handler.
 // This makes Sat objects not safe for multiple instances.
@@ -361,7 +367,7 @@ void Sat::AddrMapUpdate(struct page_entry *pe) {
 }
 
 // Print out the physical memory ranges that SAT has accessed.
-void Sat::AddrMapPrint() {
+void Sat::AddrMapPrint(TestStep &fill_step) {
   if (!do_page_map_) return;
 
   uint64 pages = page_bitmap_size_ / 4096;
@@ -369,7 +375,10 @@ void Sat::AddrMapPrint() {
   uint64 last_page = 0;
   bool valid_range = false;
 
-  logprintf(4, "Log: Printing tested physical ranges.\n");
+  fill_step.AddLog(
+      Log{.severity = LogSeverity::kInfo,
+          .message =
+              "Printing physical memory ranges that this test has accessed."});
 
   for (uint64 i = 0; i < pages; i++) {
     int offset = i / 8;
@@ -381,21 +390,38 @@ void Sat::AddrMapPrint() {
       last_page = i * 4096;
     } else if (!touched && valid_range) {
       valid_range = false;
-      logprintf(4, "Log: %#016llx - %#016llx\n", last_page, (i * 4096) - 1);
+      fill_step.AddLog(
+          Log{.severity = LogSeverity::kInfo,
+              .message = absl::StrFormat("%#016llx - %#016llx", last_page,
+                                         (i * 4096) - 1)});
     }
   }
-  logprintf(4, "Log: Done printing physical ranges.\n");
+  fill_step.AddLog(Log{.severity = LogSeverity::kInfo,
+                       .message = "Done print physical memory ranges."});
 }
 
 // Initializes page lists and fills pages with data patterns.
 bool Sat::InitializePages() {
   // TODO(b/273821926) Populate fill memory pages step
-  auto fill_step = std::make_unique<TestStep>("Fill Memory Pages", *test_run_);
+  auto fill_step =
+      std::make_unique<TestStep>("Setup and Fill Memory Pages", *test_run_);
 
   int result = 1;
+
+  fill_step->AddMeasurement(Measurement{
+      .name = "Total Memory Page Count",
+      .unit = "pages",
+      .value = static_cast<double>(pages_),
+  });
+
   // Calculate needed page totals.
-  int64 neededpages = memory_threads_ + invert_threads_ + check_threads_ +
-                      net_threads_ + file_threads_;
+  double neededpages = memory_threads_ + invert_threads_ + check_threads_ +
+                       net_threads_ + file_threads_;
+  fill_step->AddMeasurement(Measurement{
+      .name = "Required Thread Memory Page Count",
+      .unit = "pages",
+      .value = neededpages,
+  });
 
   // Empty-valid page ratio is adjusted depending on queue implementation.
   // since fine-grain-locked queue keeps both valid and empty entries in the
@@ -405,26 +431,43 @@ bool Sat::InitializePages() {
     freepages_ = pages_ / 5 * 2;  // Mark roughly 2/5 of all pages as Empty.
   else
     freepages_ = (pages_ / 100) + (2 * neededpages);
+  fill_step->AddMeasurement(Measurement{
+      .name = "Free Memory Page Count",
+      .unit = "pages",
+      .validators = ocpdiag::results::ValidateWithinInclusiveLimits(neededpages,
+                                                                    pages_ / 2),
+      .value = static_cast<double>(freepages_),
+  });
 
   if (freepages_ < neededpages) {
-    logprintf(0, "Process Error: freepages < neededpages.\n");
-    logprintf(1, "Stats: Total: %lld, Needed: %lld, Marked free: %lld\n",
-              static_cast<int64>(pages_), static_cast<int64>(neededpages),
-              static_cast<int64>(freepages_));
-    bad_status();
+    fill_step->AddError(
+        Error{.symptom = kProcessError,
+              .message = absl::StrFormat(
+                  "The number of required free memory pages is less than the "
+                  "number of pages required for the test. This likely means "
+                  "that the parameters to the test are not valid. Total Pages: "
+                  "%d, Required Pages: %d, Free Pages: %d",
+                  pages_, neededpages, freepages_)});
     return false;
   }
 
   if (freepages_ > pages_ / 2) {
-    logprintf(0, "Process Error: not enough pages for IO\n");
-    logprintf(1, "Stats: Total: %lld, Needed: %lld, Available: %lld\n",
-              static_cast<int64>(pages_), static_cast<int64>(freepages_),
-              static_cast<int64>(pages_ / 2));
-    bad_status();
+    fill_step->AddError(
+        Error{.symptom = kProcessError,
+              .message = absl::StrFormat(
+                  "The number of required free memory pages is less than the "
+                  "number of available pages. This likely means that the "
+                  "parameters to the test are not valid. Total Pages: %d, "
+                  "Required Pages: %d, Available Pages: %d",
+                  pages_, freepages_, pages_ / 2)});
     return false;
   }
-  logprintf(12, "Log: Allocating pages, Total: %lld Free: %lld\n", pages_,
-            freepages_);
+
+  fill_step->AddLog(
+      Log{.severity = LogSeverity::kDebug,
+          .message = absl::StrFormat(
+              "Allocating memory pages, Total Pages: %d, Free Pages: %d",
+              pages_, freepages_)});
 
   // Initialize page locations.
   for (int64 i = 0; i < pages_; i++) {
@@ -435,8 +478,9 @@ bool Sat::InitializePages() {
   }
 
   if (!result) {
-    logprintf(0, "Process Error: while initializing empty_ list\n");
-    bad_status();
+    fill_step->AddError(
+        Error{.symptom = kProcessError,
+              .message = "Error while initializing free memory pages"});
     return false;
   }
 
@@ -445,21 +489,30 @@ bool Sat::InitializePages() {
   WorkerStatus fill_status;
   WorkerVector fill_vector;
 
-  logprintf(12, "Starting Fill threads: %d threads, %d pages\n", fill_threads_,
-            pages_);
+  fill_step->AddLog(
+      Log{.severity = LogSeverity::kDebug,
+          .message = absl::StrFormat(
+              "Starting memory page fill threads: %d threads, %d pages",
+              fill_threads_, pages_)});
   // Initialize the fill threads.
   for (int i = 0; i < fill_threads_; i++) {
     FillThread *thread = new FillThread();
     thread->InitThread(i, this, os_, patternlist_, &fill_status,
                        fill_step.get());
     if (i != fill_threads_ - 1) {
-      logprintf(12, "Starting Fill Threads %d: %d pages\n", i,
-                pages_ / fill_threads_);
+      fill_step->AddLog(
+          Log{.severity = LogSeverity::kDebug,
+              .message = absl::StrFormat(
+                  "Starting memory page fill Thread %d to fill %d pages", i,
+                  pages_ / fill_threads_)});
       thread->SetFillPages(pages_ / fill_threads_);
       // The last thread finishes up all the leftover pages.
     } else {
-      logprintf(12, "Starting Fill Threads %d: %d pages\n", i,
-                pages_ - pages_ / fill_threads_ * i);
+      fill_step->AddLog(
+          Log{.severity = LogSeverity::kDebug,
+              .message = absl::StrFormat(
+                  "Starting memory page fill Thread %d to fill %d pages", i,
+                  pages_ - pages_ / fill_threads_ * i)});
       thread->SetFillPages(pages_ - pages_ / fill_threads_ * i);
     }
     fill_vector.push_back(thread);
@@ -476,18 +529,22 @@ bool Sat::InitializePages() {
        it != fill_vector.end(); ++it) {
     (*it)->JoinThread();
     if ((*it)->GetStatus() != 1) {
-      logprintf(0, "Thread %d failed with status %d at %.2f seconds\n",
-                (*it)->ThreadID(), (*it)->GetStatus(),
-                (*it)->GetRunDurationUSec() * 1.0 / 1000000);
-      bad_status();
+      fill_step->AddError(Error{
+          .symptom = kProcessError,
+          .message = absl::StrFormat(
+              "Memory page fill thread %d failed with status %d after running "
+              "for %.2f seconds. See error logs for additional information.",
+              (*it)->ThreadID(), (*it)->GetStatus(),
+              (*it)->GetRunDurationUSec() * 1.0 / 1000000)});
       return false;
     }
     delete (*it);
   }
   fill_vector.clear();
   fill_status.Destroy();
-  logprintf(12, "Log: Done filling pages.\n");
-  logprintf(12, "Log: Allocating pages.\n");
+  fill_step->AddLog(
+      Log{.severity = LogSeverity::kDebug,
+          .message = "Done filling memory pages. Starting to allocate pages."});
 
   AddrMapInit();
 
@@ -516,22 +573,31 @@ bool Sat::InitializePages() {
         result &= PutValid(&pe);
       }
     } else {
-      logprintf(0, "Log: didn't tag all pages. %d - %d = %d\n", pages_, i,
-                pages_ - i);
+      fill_step->AddError(Error{
+          .symptom = kProcessError,
+          .message =
+              absl::StrFormat("Error allocating pages. Total Pages: %d, Pages "
+                              "Allocated: %d, Pages Not Allocated: %d",
+                              pages_, i, pages_ - i)});
       return false;
     }
   }
-  logprintf(12, "Log: Done allocating pages.\n");
+  fill_step->AddLog(Log{.severity = LogSeverity::kDebug,
+                        .message = "Done allocating pages."});
 
-  AddrMapPrint();
+  AddrMapPrint(*fill_step);
 
   for (int i = 0; i < 32; i++) {
     if (region_mask_ & (1 << i)) {
       region_count_++;
-      logprintf(12, "Log: Region %d: %d.\n", i, region_[i]);
+      fill_step->AddLog(Log{.severity = LogSeverity::kDebug,
+                            .message = absl::StrFormat(
+                                "Region %d corresponds to %d", i, region_[i])});
     }
   }
-  logprintf(5, "Log: Region mask: 0x%x\n", region_mask_);
+  fill_step->AddLog(
+      Log{.severity = LogSeverity::kDebug,
+          .message = absl::StrFormat("Region mask: 0x%x", region_mask_)});
 
   return true;
 }
@@ -1922,7 +1988,8 @@ bool Sat::Run() {
   //    unspecified upon entering a signal handler and, if modified by the
   //    handler, is unspecified after leaving the handler.
   //
-  // 2) (POSIX) After the value of a variable is changed in one thread, another
+  // 2) (POSIX) After the value of a variable is changed in one thread,
+  // another
   //    thread is only guaranteed to see the new value after both threads have
   //    acquired or released the same mutex or rwlock, synchronized to the
   //    same barrier, or similar.
@@ -1952,7 +2019,8 @@ bool Sat::Run() {
   // In seconds.
   static const time_t kSleepFrequency = 5;
   // All of these are in seconds.  You probably want them to be >=
-  // kSleepFrequency and multiples of kSleepFrequency, but neither is necessary.
+  // kSleepFrequency and multiples of kSleepFrequency, but neither is
+  // necessary.
   static const time_t kInjectionFrequency = 10;
   // print_delay_ determines "seconds remaining" chatty update.
 

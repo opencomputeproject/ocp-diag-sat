@@ -300,7 +300,7 @@ class Sat {
   // Physical page use reporting.
   void AddrMapInit();
   void AddrMapUpdate(struct page_entry *pe);
-  void AddrMapPrint();
+  void AddrMapPrint(ocpdiag::results::TestStep &fill_step);
 
   // additional memory data from google-specific tests.
   virtual void GoogleMemoryStats(float *memcopy_data, float *memcopy_bandwidth);
