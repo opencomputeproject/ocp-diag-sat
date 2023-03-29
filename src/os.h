@@ -46,8 +46,6 @@ struct PCIDevice {
 
 typedef vector<PCIDevice *> PCIDevices;
 
-class ErrorDiag;
-
 class Clock;
 
 // This class implements OS/Platform specific funtions.
@@ -82,7 +80,8 @@ class OsLayer {
   // Virtual to physical. This implementation is optional for
   // subclasses to implement.
   // Takes a pointer, and returns the corresponding bus address.
-  virtual uint64 VirtualToPhysical(void *vaddr);
+  virtual uint64 VirtualToPhysical(void *vaddr,
+                                   ocpdiag::results::TestStep &test_step);
 
   // Prints failed dimm. This implementation is optional for
   // subclasses to implement.
@@ -95,7 +94,7 @@ class OsLayer {
 
   // Classifies addresses according to "regions"
   // This may mean different things on different platforms.
-  virtual int32 FindRegion(uint64 paddr);
+  virtual int32 FindRegion(uint64 paddr, ocpdiag::results::TestStep &test_step);
   // Find cpu cores associated with a region. Either NUMA or arbitrary.
   virtual cpu_set_t *FindCoreMask(int32 region);
   // Return cpu cores associated with a region in a hex string.
@@ -336,9 +335,6 @@ class OsLayer {
   // Get numa config, if available..
   int num_nodes() const { return num_nodes_; }
   int num_cpus() const { return num_cpus_; }
-
-  // Handle to platform-specific error diagnoser.
-  ErrorDiag *error_diagnoser_;
 
   // Disambiguate between different "warm" memcopies.
   virtual bool AdlerMemcpyWarm(uint64 *dstmem, uint64 *srcmem,

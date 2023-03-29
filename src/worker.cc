@@ -333,10 +333,10 @@ int WorkerThread::SpawnThread() {
   if (result) {
     char buf[256];
     sat_strerror(result, buf, sizeof(buf));
-    logprintf(0,
-              "Process Error: pthread_create "
-              "failed - error %d %s\n",
-              result, buf);
+    test_step_->AddError(
+        Error{.symptom = kProcessError,
+              .message =
+                  "pthread_create failed when trying to spawn a test thread."});
     status_ = false;
     return false;
   }
@@ -353,7 +353,10 @@ bool WorkerThread::JoinThread() {
   int result = pthread_join(thread_, NULL);
 
   if (result) {
-    logprintf(0, "Process Error: pthread_join failed - error %d\n", result);
+    test_step_->AddError(
+        Error{.symptom = kProcessError,
+              .message = absl::StrFormat(
+                  "pthread_join failed with error code %d.", result)});
     status_ = false;
   }
 
@@ -598,7 +601,7 @@ void WorkerThread::ProcessError(struct ErrorRecord *error, int priority,
   error->vbyteaddr = reinterpret_cast<char *>(error->vaddr) + offset;
 
   // Find physical address if possible.
-  error->paddr = os_->VirtualToPhysical(error->vbyteaddr);
+  error->paddr = os_->VirtualToPhysical(error->vbyteaddr, *test_step_);
 
   // Pretty print DIMM mapping if available.
   os_->FindDimm(error->paddr, dimm_string, sizeof(dimm_string));
@@ -606,8 +609,9 @@ void WorkerThread::ProcessError(struct ErrorRecord *error, int priority,
   // Report parseable error.
   if (priority < 5) {
     // Run miscompare error through diagnoser for logging and reporting.
-    os_->error_diagnoser_->AddMiscompareError(
-        dimm_string, reinterpret_cast<uint64>(error->vaddr), 1);
+    // TODO(b/275900374) Make this a diagnosis
+    // os_->error_diagnoser_->AddMiscompareError(
+    //     dimm_string, reinterpret_cast<uint64>(error->vaddr), 1);
 
     logprintf(priority,
               "%s: miscompare on CPU %d(<-%d) at %p(0x%llx:%s): "
@@ -645,7 +649,7 @@ void FileThread::ProcessError(struct ErrorRecord *error, int priority,
   error->vbyteaddr = reinterpret_cast<char *>(error->vaddr) + offset;
 
   // Find physical address if possible.
-  error->paddr = os_->VirtualToPhysical(error->vbyteaddr);
+  error->paddr = os_->VirtualToPhysical(error->vbyteaddr, *test_step_);
 
   // Pretty print DIMM mapping if available.
   os_->FindDimm(error->paddr, dimm_string, sizeof(dimm_string));
@@ -656,12 +660,14 @@ void FileThread::ProcessError(struct ErrorRecord *error, int priority,
   if (crc_page_ != -1) {
     int miscompare_byteoffset = static_cast<char *>(error->vbyteaddr) -
                                 static_cast<char *>(page_recs_[crc_page_].dst);
-    os_->error_diagnoser_->AddHDDMiscompareError(
-        devicename_, crc_page_, miscompare_byteoffset,
-        page_recs_[crc_page_].src, page_recs_[crc_page_].dst);
+    // TODO(b/275900374) Make this a diagnosis
+    // os_->error_diagnoser_->AddHDDMiscompareError(
+    //     devicename_, crc_page_, miscompare_byteoffset,
+    //     page_recs_[crc_page_].src, page_recs_[crc_page_].dst);
   } else {
-    os_->error_diagnoser_->AddMiscompareError(
-        dimm_string, reinterpret_cast<uint64>(error->vaddr), 1);
+    // TODO(b/275900374) Make this a diagnosis
+    // os_->error_diagnoser_->AddMiscompareError(
+    //     dimm_string, reinterpret_cast<uint64>(error->vaddr), 1);
   }
 
   logprintf(priority,
@@ -929,8 +935,8 @@ void WorkerThread::ProcessTagError(struct ErrorRecord *error, int priority,
   error->vbyteaddr = reinterpret_cast<char *>(error->vaddr);
 
   // Find physical address if possible.
-  error->paddr = os_->VirtualToPhysical(error->vbyteaddr);
-  error->tagpaddr = os_->VirtualToPhysical(error->tagvaddr);
+  error->paddr = os_->VirtualToPhysical(error->vbyteaddr, *test_step_);
+  error->tagpaddr = os_->VirtualToPhysical(error->tagvaddr, *test_step_);
 
   // Pretty print DIMM mapping if available.
   os_->FindDimm(error->paddr, dimm_string, sizeof(dimm_string));
@@ -1713,9 +1719,11 @@ bool FileThread::SectorValidatePage(const struct PageRec &page,
 
       // Run sector tag error through diagnoser for logging and reporting.
       errorcount_ += 1;
-      os_->error_diagnoser_->AddHDDSectorTagError(devicename_, tag[sec].block,
-                                                  offset, tag[sec].sector,
-                                                  page.src, page.dst);
+      // TODO(b/275900374) Make this a diagnosis
+      // os_->error_diagnoser_->AddHDDSectorTagError(devicename_,
+      // tag[sec].block,
+      //                                             offset, tag[sec].sector,
+      //                                             page.src, page.dst);
 
       errorcount_ += 1;
       logprintf(5,
@@ -3268,7 +3276,7 @@ void MemoryRegionThread::ProcessError(struct ErrorRecord *error, int priority,
     buffer_offset = error->vbyteaddr - region_;
 
     // Find physical address if possible.
-    error->paddr = os_->VirtualToPhysical(error->vbyteaddr);
+    error->paddr = os_->VirtualToPhysical(error->vbyteaddr, *test_step_);
     logprintf(priority,
               "%s: miscompare on %s, CRC check at %p(0x%llx), "
               "offset %llx: read:0x%016llx, reread:0x%016llx "
