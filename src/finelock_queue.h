@@ -39,9 +39,6 @@ class FineLockPEQueue {
 
   bool QueueAnalysis();
   bool GetPageFromPhysical(uint64 paddr, struct page_entry *pe);
-  void set_os(OsLayer *os);
-  OsLayer::ErrCallback get_err_log_callback();
-  bool ErrorLogCallback(uint64 paddr, string *buf);
 
  private:
   // Not that much blocking random number generator.

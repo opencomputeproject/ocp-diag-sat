@@ -75,7 +75,6 @@ OsLayer::OsLayer() {
   num_nodes_ = 0;
   num_cpus_per_node_ = 0;
   error_diagnoser_ = 0;
-  err_log_callback_ = 0;
   error_injection_ = false;
 
   void *pvoid = 0;

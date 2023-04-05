@@ -680,8 +680,6 @@ bool Sat::Initialize() {
   if (pe_q_implementation_ == SAT_FINELOCK) {
     finelock_q_ = new FineLockPEQueue(pages_, page_length_);
     if (finelock_q_ == NULL) return false;
-    finelock_q_->set_os(os_);
-    os_->set_err_log_callback(finelock_q_->get_err_log_callback());
   } else if (pe_q_implementation_ == SAT_ONELOCK) {
     empty_ = new PageEntryQueue(pages_);
     valid_ = new PageEntryQueue(pages_);
