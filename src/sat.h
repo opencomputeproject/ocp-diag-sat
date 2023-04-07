@@ -263,9 +263,8 @@ class Sat {
     kDiskType = 6,
     kRandomDiskType = 7,
     kCPUType = 8,
-    kErrorType = 9,
-    kCCType = 10,
-    kCPUFreqType = 11,
+    kCCType = 9,
+    kCPUFreqType = 10,
   };
 
   // Helper functions.

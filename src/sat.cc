@@ -1197,39 +1197,15 @@ void Sat::PrintHelp() {
 
 // Launch the SAT task threads. Returns 0 on error.
 void Sat::InitializeThreads() {
-  // Memory copy threads.
+  // Skip creating threads if in monitor mode.
+  if (monitor_mode_) return;
+
   AcquireWorkerLock();
 
   logprintf(12, "Log: Starting worker threads\n");
-  WorkerVector *memory_vector = new WorkerVector();
-
-  // Error polling thread.
-  // This may detect ECC corrected errors, disk problems, or
-  // any other errors normally hidden from userspace.
-  // TODO(b/274515842) Populate error polling step
-  WorkerVector *error_vector = new WorkerVector();
-  if (error_poll_) {
-    auto error_poll_step = std::make_unique<TestStep>(
-        "Poll for System Error Messages", *test_run_);
-    ErrorPollThread *thread = new ErrorPollThread();
-    thread->InitThread(total_threads_++, this, os_, patternlist_,
-                       &continuous_status_, error_poll_step.get());
-
-    error_vector->insert(error_vector->end(), thread);
-    thread_test_steps_.push_back(std::move(error_poll_step));
-  } else {
-    logprintf(5, "Log: Skipping error poll thread due to --no_errors flag\n");
-  }
-  workers_map_.insert(make_pair(kErrorType, error_vector));
-
-  // Only start error poll threads for monitor-mode SAT,
-  // skip all other types of worker threads.
-  if (monitor_mode_) {
-    ReleaseWorkerLock();
-    return;
-  }
 
   // TODO(b/274512309) Populate memory copy thread step
+  WorkerVector *memory_vector = new WorkerVector();
   std::unique_ptr<TestStep> copy_step;
   if (memory_threads_ > 0) {
     copy_step =
