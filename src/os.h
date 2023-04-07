@@ -103,13 +103,6 @@ class OsLayer {
   // Returns the HD device that contains this file.
   virtual string FindFileDevice(string filename);
 
-  // Polls for errors. This implementation is optional.
-  // This will poll once for errors and return zero iff no errors were found.
-  virtual int ErrorPoll();
-
-  // Delay an appropriate amount of time between polling.
-  virtual void ErrorWait();
-
   // Report errors. This implementation is mandatory.
   // This will output a machine readable line regarding the error.
   virtual bool ErrorReport(const char *part, const char *symptom, int count);

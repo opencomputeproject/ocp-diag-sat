@@ -770,15 +770,6 @@ void OsLayer::ReleaseTestMem(void *addr, uint64 offset, uint64 length) {
   }
 }
 
-// No error polling on unknown systems.
-int OsLayer::ErrorPoll() { return 0; }
-
-// Generally, poll for errors once per second.
-void OsLayer::ErrorWait() {
-  sat_sleep(1);
-  return;
-}
-
 // Open a PCI bus-dev-func as a file and return its file descriptor.
 // Error is indicated by return value less than zero.
 int OsLayer::PciOpen(int bus, int device, int function) {

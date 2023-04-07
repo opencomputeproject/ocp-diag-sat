@@ -2370,22 +2370,6 @@ bool NetworkSlaveThread::Work() {
   return true;
 }
 
-// Thread work loop. Execute until marked finished.
-bool ErrorPollThread::Work() {
-  logprintf(9, "Log: Starting system error poll thread %d\n", thread_num_);
-
-  // This calls a generic error polling function in the Os abstraction layer.
-  do {
-    errorcount_ += os_->ErrorPoll();
-    os_->ErrorWait();
-  } while (IsReadyToRun());
-
-  logprintf(9, "Log: Finished system error poll thread %d: %d errors\n",
-            thread_num_, errorcount_);
-  status_ = true;
-  return true;
-}
-
 // Worker thread to heat up CPU.
 // This thread does not evaluate pass/fail or software error.
 bool CpuStressThread::Work() {

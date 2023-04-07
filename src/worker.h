@@ -577,17 +577,6 @@ class CheckThread : public WorkerThread {
   DISALLOW_COPY_AND_ASSIGN(CheckThread);
 };
 
-// Worker thread to poll for system error messages.
-// Thread will check for messages until "done" flag is set.
-class ErrorPollThread : public WorkerThread {
- public:
-  ErrorPollThread() {}
-  virtual bool Work();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ErrorPollThread);
-};
-
 // Computation intensive worker thread to stress CPU.
 class CpuStressThread : public WorkerThread {
  public:
