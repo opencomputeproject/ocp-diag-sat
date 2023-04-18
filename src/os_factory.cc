@@ -23,9 +23,6 @@ OsLayer *OsLayerFactory(const std::map<std::string, std::string> &options) {
   os = new OsLayer();
 
   // Check for memory allocation failure.
-  if (!os) {
-    logprintf(0, "Process Error: Can't allocate memory\n");
-    return 0;
-  }
+  if (!os) return 0;
   return os;
 }

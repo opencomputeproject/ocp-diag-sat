@@ -21,7 +21,8 @@
 // so these includes are correct.
 #include "adler32memcpy.h"  // NOLINT
 #include "clock.h"          // NOLINT
-#include "sattypes.h"       // NOLINT
+#include "ocpdiag/core/results/test_step.h"
+#include "sattypes.h"  // NOLINT
 
 #if defined(STRESSAPPTEST_CPU_X86_64) || defined(STRESSAPPTEST_CPU_I686)
 #include <immintrin.h>
@@ -76,7 +77,7 @@ class OsLayer {
 
   // Initializes data strctures and open files.
   // Returns false on error.
-  virtual bool Initialize();
+  virtual bool Initialize(ocpdiag::results::TestStep &TestStep);
 
   // Virtual to physical. This implementation is optional for
   // subclasses to implement.
@@ -102,9 +103,6 @@ class OsLayer {
 
   // Returns the HD device that contains this file.
   virtual string FindFileDevice(string filename);
-
-  // Returns a list of paths coresponding to HD devices found on this machine.
-  virtual list<string> FindFileDevices();
 
   // Polls for errors. This implementation is optional.
   // This will poll once for errors and return zero iff no errors were found.
@@ -288,14 +286,16 @@ class OsLayer {
   }
 
   // Find the free memory on the machine.
-  virtual int64 FindFreeMemSize();
+  virtual int64 FindFreeMemSize(ocpdiag::results::TestStep &test_step);
 
   // Allocates test memory of length bytes.
   // Subclasses must implement this.
   // Call PepareTestMem to get a pointer.
-  virtual int64 AllocateAllMem();  // Returns length.
+  virtual int64 AllocateAllMem(
+      ocpdiag::results::TestStep &test_step);  // Returns length.
   // Returns success.
-  virtual bool AllocateTestMem(int64 length, uint64 paddr_base);
+  virtual bool AllocateTestMem(int64 length, uint64 paddr_base,
+                               ocpdiag::results::TestStep &test_step);
   virtual void FreeTestMem();
 
   // Prepares the memory for use. You must call this
@@ -303,14 +303,10 @@ class OsLayer {
   virtual void *PrepareTestMem(uint64 offset, uint64 length);
   virtual void ReleaseTestMem(void *addr, uint64 offset, uint64 length);
 
-  // Machine type detected. Can we implement all these functions correctly?
-  // Returns true if machine type is detected and implemented.
-  virtual bool IsSupported();
-
   // Returns 32 for 32-bit, 64 for 64-bit.
   virtual int AddressMode();
   // Update OsLayer state regarding cpu support for various features.
-  virtual void GetFeatures();
+  virtual void GetFeatures(ocpdiag::results::TestStep &setup_step);
 
   // Open, read, write pci cfg through /proc/bus/pci. fd is /proc/pci file.
   virtual int PciOpen(int bus, int device, int function);
@@ -405,7 +401,7 @@ class OsLayer {
   virtual int OpenMSR(uint32 core, uint32 address);
 
   // Look up how many hugepages there are.
-  virtual int64 FindHugePages();
+  virtual int64 FindHugePages(ocpdiag::results::TestStep &test_step);
 
   // Link to find last transaction at an error location.
   ErrCallback err_log_callback_;

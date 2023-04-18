@@ -786,7 +786,7 @@ class CpuFreqThread : public WorkerThread {
 
   // Returns true if this test can run on the current machine. Otherwise,
   // returns false.
-  static bool CanRun();
+  static bool CanRun(ocpdiag::results::TestStep &test_step);
 
  private:
   static const int kIntervalPause = 10;   // The number of seconds to pause
