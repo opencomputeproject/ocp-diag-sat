@@ -96,9 +96,10 @@ class OsLayer {
   // This may mean different things on different platforms.
   virtual int32 FindRegion(uint64 paddr, ocpdiag::results::TestStep &test_step);
   // Find cpu cores associated with a region. Either NUMA or arbitrary.
-  virtual cpu_set_t *FindCoreMask(int32 region);
+  virtual cpu_set_t *FindCoreMask(int32 region,
+                                  ocpdiag::results::TestStep &test_step);
   // Return cpu cores associated with a region in a hex string.
-  virtual string FindCoreMaskFormat(int32 region);
+  virtual string FindCoreMaskFormat(cpu_set_t *mask);
 
   // Returns the HD device that contains this file.
   virtual string FindFileDevice(string filename);

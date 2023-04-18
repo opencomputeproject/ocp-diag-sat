@@ -317,7 +317,7 @@ int32 OsLayer::FindRegion(uint64 addr, TestStep &test_step) {
 }
 
 // Report which cores are associated with a given region.
-cpu_set_t *OsLayer::FindCoreMask(int32 region) {
+cpu_set_t *OsLayer::FindCoreMask(int32 region, TestStep &test_step) {
   sat_assert(region >= 0);
   region %= num_nodes_;
   if (!cpu_sets_valid_[region]) {
@@ -326,15 +326,17 @@ cpu_set_t *OsLayer::FindCoreMask(int32 region) {
       CPU_SET(i + region * num_cpus_per_node_, &cpu_sets_[region]);
     }
     cpu_sets_valid_[region] = true;
-    logprintf(5, "Log: Region %d mask 0x%s\n", region,
-              FindCoreMaskFormat(region).c_str());
+    test_step.AddLog(Log{
+        LogSeverity::kDebug,
+        absl::StrFormat("Region %d mask 0x%s\n", region,
+                        FindCoreMaskFormat(&cpu_sets_[region])),
+    });
   }
   return &cpu_sets_[region];
 }
 
 // Return cores associated with a given region in hex string.
-string OsLayer::FindCoreMaskFormat(int32 region) {
-  cpu_set_t *mask = FindCoreMask(region);
+string OsLayer::FindCoreMaskFormat(cpu_set_t* mask) {
   string format = cpuset_format(mask);
   if (format.size() < 8) format = string(8 - format.size(), '0') + format;
   return format;

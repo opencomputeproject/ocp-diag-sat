@@ -26,6 +26,7 @@
 #include "worker.h"
 
 constexpr char kProcessError[] = "sat-process-error";
+constexpr char kMemoryCopyFailVerdict[] = "sat-memory-copy-fail";
 
 // SAT stress test class.
 class Sat {

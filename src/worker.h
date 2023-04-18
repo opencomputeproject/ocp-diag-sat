@@ -29,6 +29,7 @@
 // This file must work with autoconf on its public version,
 // so these includes are correct.
 #include "disk_blocks.h"
+#include "ocpdiag/core/results/data_model/input_model.h"
 #include "ocpdiag/core/results/test_step.h"
 #include "queue.h"
 #include "sattypes.h"
@@ -242,6 +243,7 @@ class WorkerThread {
   int64 GetErrorCount() { return errorcount_; }
   int64 GetPageCount() { return pages_copied_; }
   int64 GetRunDurationUSec() { return runduration_usec_; }
+  virtual string GetThreadTypeName() { return "Generic Worker Thread"; }
 
   // Returns bandwidth defined as pages_copied / thread_run_durations.
   virtual float GetCopiedData();
@@ -300,8 +302,7 @@ class WorkerThread {
 
   // These are functions used by the various work loops.
   // Pretty print and log a data miscompare.
-  virtual void ProcessError(struct ErrorRecord *er, int priority,
-                            const char *message);
+  virtual void ProcessError(struct ErrorRecord *er, const char *message);
 
   // Compare a region of memory with a known data patter, and report errors.
   virtual int CheckRegion(void *addr, class Pattern *pat, uint32 lastcpu,
@@ -337,11 +338,14 @@ class WorkerThread {
   // Report a mistagged cacheline.
   virtual bool ReportTagError(uint64 *mem64, uint64 actual, uint64 tag);
   // Print out the error record of the tag mismatch.
-  virtual void ProcessTagError(struct ErrorRecord *error, int priority,
-                               const char *message);
+  virtual void ProcessTagError(struct ErrorRecord *error, const char *message);
 
   // A worker thread can yield itself to give up CPU until it's scheduled again
   bool YieldSelf();
+
+  void AddLog(ocpdiag::results::LogSeverity severity, string message);
+
+  void AddProcessError(string message);
 
  protected:
   // General state variables that all subclasses need.
@@ -403,8 +407,7 @@ class FileThread : public WorkerThread {
   // These are functions used by the various work loops.
   // Pretty print and log a data miscompare. Disks require
   // slightly different error handling.
-  virtual void ProcessError(struct ErrorRecord *er, int priority,
-                            const char *message);
+  virtual void ProcessError(struct ErrorRecord *er, const char *message);
 
   virtual bool OpenFile(int *pfile);
   virtual bool CloseFile(int fd);
@@ -530,6 +533,9 @@ class CopyThread : public WorkerThread {
   // Calculate worker thread specific bandwidth.
   virtual float GetMemoryCopiedData() { return GetCopiedData() * 2; }
 
+ protected:
+  string GetThreadTypeName() { return "Memory Copy Thread"; }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(CopyThread);
 };
@@ -555,6 +561,9 @@ class FillThread : public WorkerThread {
   // Set how many pages this thread should fill before exiting.
   virtual void SetFillPages(int64 num_pages_to_fill_init);
   virtual bool Work();
+
+ protected:
+  string GetThreadTypeName() { return "Memory Page Fill Thread"; }
 
  private:
   // Fill a page with the data pattern in pe->pattern.

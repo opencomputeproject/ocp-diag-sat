@@ -1199,7 +1199,6 @@ void Sat::InitializeThreads() {
 
   logprintf(12, "Log: Starting worker threads\n");
 
-  // TODO(b/274512309) Populate memory copy thread step
   WorkerVector *memory_vector = new WorkerVector();
   std::unique_ptr<TestStep> copy_step;
   if (memory_threads_ > 0) {
@@ -1213,7 +1212,7 @@ void Sat::InitializeThreads() {
 
     if ((region_count_ > 1) && (region_mode_)) {
       int32 region = region_find(i % region_count_);
-      cpu_set_t *cpuset = os_->FindCoreMask(region);
+      cpu_set_t *cpuset = os_->FindCoreMask(region, *copy_step);
       sat_assert(cpuset);
       if (region_mode_ == kLocalNuma) {
         // Choose regions associated with this CPU.
@@ -1241,9 +1240,12 @@ void Sat::InitializeThreads() {
         if (!cpuset_isequal(&available_cpus, &all_cores)) {
           // We are assuming the bits are contiguous.
           // Complain if this is not so.
-          logprintf(0, "Log: cores = %s, expected %s\n",
-                    cpuset_format(&available_cpus).c_str(),
-                    cpuset_format(&all_cores).c_str());
+          copy_step->AddLog(Log{
+              .severity = LogSeverity::kWarning,
+              .message = absl::StrFormat("Did not find the expected number of "
+                                         "CPU cores. Expected: %s, Actual: %s",
+                                         cpuset_format(&all_cores),
+                                         cpuset_format(&available_cpus))});
         }
 
         // Set thread affinity.
