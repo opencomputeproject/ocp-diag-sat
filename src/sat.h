@@ -228,7 +228,6 @@ class Sat {
   int disk_threads_;        // Threads of disk test.
   int random_threads_;      // Number of random disk threads.
   int total_threads_;       // Total threads used.
-  bool error_poll_;         // Poll for system errors.
 
   // Resources.
   cc_cacheline_data *cc_cacheline_data_;  // The cache line sized datastructure
@@ -263,9 +262,8 @@ class Sat {
     kDiskType = 6,
     kRandomDiskType = 7,
     kCPUType = 8,
-    kErrorType = 9,
-    kCCType = 10,
-    kCPUFreqType = 11,
+    kCCType = 9,
+    kCPUFreqType = 10,
   };
 
   // Helper functions.

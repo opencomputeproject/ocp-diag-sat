@@ -727,7 +727,6 @@ Sat::Sat() {
   crazy_error_injection_ = false;
   max_errorcount_ = 0;  // Zero means no early exit.
   stop_on_error_ = false;
-  error_poll_ = true;
 
   do_page_map_ = false;
   page_bitmap_ = 0;
@@ -912,9 +911,6 @@ bool Sat::ParseArgs(int argc, const char **argv) {
 
     // Stop immediately on any arror, for debugging HW problems.
     ARG_KVALUE("--stop_on_errors", stop_on_error_, 1);
-
-    // Don't use internal error polling, allow external detection.
-    ARG_KVALUE("--no_errors", error_poll_, 0);
 
     // Never check data as you go.
     ARG_KVALUE("-F", strict_, 0);
@@ -1145,7 +1141,6 @@ void Sat::PrintHelp() {
       "system at 'ipaddr'\n"
       " --listen         run a thread to listen for and respond "
       "to network threads.\n"
-      " --no_errors      run without checking for ECC or other errors\n"
       " --force_errors   inject false errors to test error handling\n"
       " --force_errors_like_crazy   inject a lot of false errors "
       "to test error handling\n"
@@ -1197,39 +1192,15 @@ void Sat::PrintHelp() {
 
 // Launch the SAT task threads. Returns 0 on error.
 void Sat::InitializeThreads() {
-  // Memory copy threads.
+  // Skip creating threads if in monitor mode.
+  if (monitor_mode_) return;
+
   AcquireWorkerLock();
 
   logprintf(12, "Log: Starting worker threads\n");
-  WorkerVector *memory_vector = new WorkerVector();
-
-  // Error polling thread.
-  // This may detect ECC corrected errors, disk problems, or
-  // any other errors normally hidden from userspace.
-  // TODO(b/274515842) Populate error polling step
-  WorkerVector *error_vector = new WorkerVector();
-  if (error_poll_) {
-    auto error_poll_step = std::make_unique<TestStep>(
-        "Poll for System Error Messages", *test_run_);
-    ErrorPollThread *thread = new ErrorPollThread();
-    thread->InitThread(total_threads_++, this, os_, patternlist_,
-                       &continuous_status_, error_poll_step.get());
-
-    error_vector->insert(error_vector->end(), thread);
-    thread_test_steps_.push_back(std::move(error_poll_step));
-  } else {
-    logprintf(5, "Log: Skipping error poll thread due to --no_errors flag\n");
-  }
-  workers_map_.insert(make_pair(kErrorType, error_vector));
-
-  // Only start error poll threads for monitor-mode SAT,
-  // skip all other types of worker threads.
-  if (monitor_mode_) {
-    ReleaseWorkerLock();
-    return;
-  }
 
   // TODO(b/274512309) Populate memory copy thread step
+  WorkerVector *memory_vector = new WorkerVector();
   std::unique_ptr<TestStep> copy_step;
   if (memory_threads_ > 0) {
     copy_step =
