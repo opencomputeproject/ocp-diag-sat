@@ -346,16 +346,6 @@ class OsLayer {
                                AdlerChecksum *checksum);
   bool has_vector() const { return has_vector_; }
 
-  // Store a callback to use to print
-  // app-specific info about the last error location.
-  // This call back is called with a physical address, and the app can fill in
-  // the most recent transaction that occurred at that address.
-  typedef bool (*ErrCallback)(uint64 paddr, string *buf);
-  void set_err_log_callback(ErrCallback err_log_callback) {
-    err_log_callback_ = err_log_callback;
-  }
-  ErrCallback get_err_log_callback() { return err_log_callback_; }
-
   // Set a clock object that can be overridden for use with unit tests.
   void SetClock(Clock *clock) {
     if (clock_) {
@@ -402,9 +392,6 @@ class OsLayer {
 
   // Look up how many hugepages there are.
   virtual int64 FindHugePages(ocpdiag::results::TestStep &test_step);
-
-  // Link to find last transaction at an error location.
-  ErrCallback err_log_callback_;
 
   // Object to wrap the time function.
   Clock *clock_;
