@@ -179,11 +179,13 @@ int ErrorDiag::AddMiscompareError(string dimm_string, uint64 addr, int count) {
 // Utility Function to translate a virtual address to DIMM number.
 // Returns -1 on error, 1 if diagnoser reports error externally; 0 otherwise.
 string ErrorDiag::AddressToDimmString(OsLayer *os, void *addr, int offset) {
-  char dimm_string[256] = "";
-  char *vbyteaddr = reinterpret_cast<char *>(addr) + offset;
-  uint64 paddr = os->VirtualToPhysical(vbyteaddr);
-  os->FindDimm(paddr, dimm_string, sizeof(dimm_string));
-  return string(dimm_string);
+  // TODO(b/275900374) Delete this whole class
+  // char dimm_string[256] = "";
+  // char *vbyteaddr = reinterpret_cast<char *>(addr) + offset;
+  // uint64 paddr = os->VirtualToPhysical(vbyteaddr);
+  // os->FindDimm(paddr, dimm_string, sizeof(dimm_string));
+  // return string(dimm_string);
+  return "";
 }
 
 // Info about a miscompare from a drive.

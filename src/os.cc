@@ -74,7 +74,6 @@ OsLayer::OsLayer() {
   num_cpus_ = 0;
   num_nodes_ = 0;
   num_cpus_per_node_ = 0;
-  error_diagnoser_ = 0;
   error_injection_ = false;
 
   void *pvoid = 0;
@@ -90,7 +89,6 @@ OsLayer::OsLayer() {
 
 // OsLayer cleanup.
 OsLayer::~OsLayer() {
-  if (error_diagnoser_) delete error_diagnoser_;
   if (clock_) delete clock_;
 }
 
@@ -123,9 +121,6 @@ bool OsLayer::Initialize(TestStep &setup_step) {
 
   cpu_sets_.resize(num_nodes_);
   cpu_sets_valid_.resize(num_nodes_);
-  // Create error diagnoser.
-  error_diagnoser_ = new ErrorDiag();
-  if (!error_diagnoser_->set_os(this)) return false;
   return true;
 }
 
@@ -136,7 +131,7 @@ int OsLayer::AddressMode() {
 }
 
 // Translates user virtual to physical address.
-uint64 OsLayer::VirtualToPhysical(void *vaddr) {
+uint64 OsLayer::VirtualToPhysical(void *vaddr, TestStep &test_step) {
   uint64 frame, paddr, pfnmask, pagemask;
   int pagesize = sysconf(_SC_PAGESIZE);
   off_t off = ((uintptr_t)vaddr) / pagesize * 8;
@@ -153,8 +148,13 @@ uint64 OsLayer::VirtualToPhysical(void *vaddr) {
   if (lseek(fd, off, SEEK_SET) != off || read(fd, &frame, 8) != 8) {
     int err = errno;
     string errtxt = ErrorString(err);
-    logprintf(0, "Process Error: failed to access %s with errno %d (%s)\n",
-              kPagemapPath, err, errtxt.c_str());
+    test_step.AddError(Error{
+        .symptom = kProcessError,
+        .message = absl::StrFormat(
+            "Error when converting the user virtual address to the physical "
+            "address. Failed to access %s with error code %d (%s).",
+            kPagemapPath, err, errtxt),
+    });
     if (fd >= 0) close(fd);
     return 0;
   }
@@ -290,7 +290,7 @@ int OsLayer::FindDimm(uint64 addr, char *buf, int len) {
 
 // Classifies addresses according to "regions"
 // This isn't really implemented meaningfully here..
-int32 OsLayer::FindRegion(uint64 addr) {
+int32 OsLayer::FindRegion(uint64 addr, TestStep &test_step) {
   static bool warned = false;
 
   if (regionsize_ == 0) {
@@ -303,8 +303,12 @@ int32 OsLayer::FindRegion(uint64 addr) {
   int32 region_num = addr / regionsize_;
   if (region_num >= regioncount_) {
     if (!warned) {
-      logprintf(0, "Log: region number %d exceeds region count %d\n",
-                region_num, regioncount_);
+      test_step.AddLog(Log{
+          .severity = LogSeverity::kWarning,
+          .message = absl::StrFormat(
+              "Error when trying to determine memory region. Region number %d "
+              "exceeds region count %d.",
+              region_num, regioncount_)});
       warned = true;
     }
     region_num = region_num % regioncount_;

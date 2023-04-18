@@ -319,7 +319,7 @@ void Sat::AddrMapInit(TestStep &fill_step) {
 }
 
 // Add the 4k pages in this block to the array of pages SAT has seen.
-void Sat::AddrMapUpdate(struct page_entry *pe) {
+void Sat::AddrMapUpdate(struct page_entry *pe, TestStep &fill_step) {
   if (!do_page_map_) return;
 
   // Go through 4k page blocks.
@@ -327,17 +327,18 @@ void Sat::AddrMapUpdate(struct page_entry *pe) {
 
   char *base = reinterpret_cast<char *>(pe->addr);
   for (int i = 0; i < page_length_; i += 4096) {
-    uint64 paddr = os_->VirtualToPhysical(base + i);
+    uint64 paddr = os_->VirtualToPhysical(base + i, fill_step);
 
     uint32 offset = paddr / 4096 / 8;
     unsigned char mask = 1 << ((paddr / 4096) % 8);
 
-    // TODO(dthawkes) Convert this to a test step error
     if (offset >= arraysize) {
-      logprintf(0,
-                "Process Error: Physical address %#llx is "
-                "greater than expected %#llx.\n",
-                paddr, page_bitmap_size_);
+      fill_step.AddError({Error{
+          .symptom = kProcessError,
+          .message = absl::StrFormat("Physical address %#llx is greater than "
+                                     "the expected limit %#llx.",
+                                     paddr, page_bitmap_size_),
+      }});
       sat_assert(0);
     }
     page_bitmap_[offset] |= mask;
@@ -531,15 +532,15 @@ bool Sat::InitializePages() {
     struct page_entry pe;
     // Only get valid pages with uninitialized tags here.
     if (GetValid(&pe, kInvalidTag)) {
-      int64 paddr = os_->VirtualToPhysical(pe.addr);
-      int32 region = os_->FindRegion(paddr);
+      int64 paddr = os_->VirtualToPhysical(pe.addr, *fill_step);
+      int32 region = os_->FindRegion(paddr, *fill_step);
       region_[region]++;
       pe.paddr = paddr;
       pe.tag = 1 << region;
       region_mask_ |= pe.tag;
 
       // Generate a physical region map
-      AddrMapUpdate(&pe);
+      AddrMapUpdate(&pe, *fill_step);
 
       // Note: this does not allocate free pages among all regions
       // fairly. However, with large enough (thousands) random number
@@ -1284,6 +1285,7 @@ void Sat::InitializeThreads() {
   if (memory_threads_ > 0) thread_test_steps_.push_back(std::move(copy_step));
 
   // File IO threads.
+  // TODO(b/275900374) Populate file IO step
   std::unique_ptr<TestStep> file_io_step;
   if (file_threads_ > 0) {
     file_io_step =
