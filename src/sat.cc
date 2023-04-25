@@ -225,10 +225,12 @@ bool Sat::InitializePatterns(TestStep &setup_step) {
 }
 
 // Get any valid page, no tag specified.
-bool Sat::GetValid(struct page_entry *pe) { return GetValid(pe, kDontCareTag); }
+bool Sat::GetValid(struct page_entry *pe, TestStep &test_step) {
+  return GetValid(pe, kDontCareTag, test_step);
+}
 
 // Fetch and return empty and full pages into the empty and full pools.
-bool Sat::GetValid(struct page_entry *pe, int32 tag) {
+bool Sat::GetValid(struct page_entry *pe, int32 tag, TestStep &test_step) {
   bool result = false;
   // Get valid page depending on implementation.
   if (pe_q_implementation_ == SAT_FINELOCK)
@@ -237,7 +239,8 @@ bool Sat::GetValid(struct page_entry *pe, int32 tag) {
     result = valid_->PopRandom(pe);
 
   if (result) {
-    pe->addr = os_->PrepareTestMem(pe->offset, page_length_);  // Map it.
+    pe->addr =
+        os_->PrepareTestMem(pe->offset, page_length_, test_step);  // Map it.
 
     // Tag this access and current pattern.
     pe->ts = os_->GetTimestamp();
@@ -248,9 +251,10 @@ bool Sat::GetValid(struct page_entry *pe, int32 tag) {
   return false;
 }
 
-bool Sat::PutValid(struct page_entry *pe) {
+bool Sat::PutValid(struct page_entry *pe, TestStep &test_step) {
   if (pe->addr != 0)
-    os_->ReleaseTestMem(pe->addr, pe->offset, page_length_);  // Unmap the page.
+    os_->ReleaseTestMem(pe->addr, pe->offset, page_length_,
+                        test_step);  // Unmap the page.
   pe->addr = 0;
 
   // Put valid page depending on implementation.
@@ -263,9 +267,11 @@ bool Sat::PutValid(struct page_entry *pe) {
 }
 
 // Get an empty page with any tag.
-bool Sat::GetEmpty(struct page_entry *pe) { return GetEmpty(pe, kDontCareTag); }
+bool Sat::GetEmpty(struct page_entry *pe, TestStep &test_step) {
+  return GetEmpty(pe, kDontCareTag, test_step);
+}
 
-bool Sat::GetEmpty(struct page_entry *pe, int32 tag) {
+bool Sat::GetEmpty(struct page_entry *pe, int32 tag, TestStep &test_step) {
   bool result = false;
   // Get empty page depending on implementation.
   if (pe_q_implementation_ == SAT_FINELOCK)
@@ -274,15 +280,17 @@ bool Sat::GetEmpty(struct page_entry *pe, int32 tag) {
     result = empty_->PopRandom(pe);
 
   if (result) {
-    pe->addr = os_->PrepareTestMem(pe->offset, page_length_);  // Map it.
+    pe->addr =
+        os_->PrepareTestMem(pe->offset, page_length_, test_step);  // Map it.
     return (pe->addr != 0);  // Return success or failure.
   }
   return false;
 }
 
-bool Sat::PutEmpty(struct page_entry *pe) {
+bool Sat::PutEmpty(struct page_entry *pe, TestStep &test_step) {
   if (pe->addr != 0)
-    os_->ReleaseTestMem(pe->addr, pe->offset, page_length_);  // Unmap the page.
+    os_->ReleaseTestMem(pe->addr, pe->offset, page_length_,
+                        test_step);  // Unmap the page.
   pe->addr = 0;
 
   // Put empty page depending on implementation.
@@ -453,7 +461,7 @@ bool Sat::InitializePages() {
     struct page_entry pe;
     init_pe(&pe);
     pe.offset = i * page_length_;
-    result &= PutEmpty(&pe);
+    result &= PutEmpty(&pe, *fill_step);
   }
 
   if (!result) {
@@ -531,7 +539,7 @@ bool Sat::InitializePages() {
   for (int64 i = 0; i < pages_; i++) {
     struct page_entry pe;
     // Only get valid pages with uninitialized tags here.
-    if (GetValid(&pe, kInvalidTag)) {
+    if (GetValid(&pe, kInvalidTag, *fill_step)) {
       int64 paddr = os_->VirtualToPhysical(pe.addr, *fill_step);
       int32 region = os_->FindRegion(paddr, *fill_step);
       region_[region]++;
@@ -547,9 +555,9 @@ bool Sat::InitializePages() {
       // of pages being marked free in each region, the free pages
       // count in each region end up pretty balanced.
       if (i < freepages_) {
-        result &= PutEmpty(&pe);
+        result &= PutEmpty(&pe, *fill_step);
       } else {
-        result &= PutValid(&pe);
+        result &= PutValid(&pe, *fill_step);
       }
     } else {
       fill_step->AddError(Error{
@@ -1269,7 +1277,7 @@ void Sat::InitializeThreads() {
     FileThread *thread = new FileThread();
     thread->InitThread(total_threads_++, this, os_, patternlist_,
                        &power_spike_status_, file_io_step.get());
-    thread->SetFile(filename_[i].c_str());
+    thread->SetFile(filename_[i]);
     // Set disk threads high priority. They don't take much processor time,
     // but blocking them will delay disk IO.
     thread->SetPriority(WorkerThread::High);
@@ -2020,13 +2028,14 @@ bool Sat::Run() {
 
     if (next_injection && now >= next_injection) {
       // Inject an error.
-      logprintf(4, "Log: Injecting error (%d seconds remaining)\n",
-                seconds_remaining);
-      struct page_entry src;
-      GetValid(&src);
-      src.pattern = patternlist_->GetPattern(0);
-      PutValid(&src);
-      next_injection = NextOccurance(kInjectionFrequency, start, now);
+      // TODO(b/279508366) Add this to the main loop test step
+      // logprintf(4, "Log: Injecting error (%d seconds remaining)\n",
+      //           seconds_remaining);
+      // struct page_entry src;
+      // GetValid(&src);
+      // src.pattern = patternlist_->GetPattern(0);
+      // PutValid(&src);
+      // next_injection = NextOccurance(kInjectionFrequency, start, now);
     }
 
     if (next_pause && now >= next_pause) {

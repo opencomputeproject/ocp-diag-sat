@@ -27,6 +27,11 @@
 
 constexpr char kProcessError[] = "sat-process-error";
 constexpr char kMemoryCopyFailVerdict[] = "sat-memory-copy-fail";
+constexpr char kFileWriteFailVerdict[] = "sat-file-write-fail";
+constexpr char kFileReadFailVerdict[] = "sat-file-read-fail";
+constexpr char kHddSectorTagFailVerdict[] = "sat-hdd-sector-tag-fail";
+constexpr char kHddMiscompareFailVerdict[] = "sat-hdd-crc-miscompare-fail";
+constexpr char kGeneralMiscompareFailVerdict[] = "sat-general-crc-miscompare-fail";
 
 // SAT stress test class.
 class Sat {
@@ -67,13 +72,15 @@ class Sat {
   void Break() { user_break_ = true; }
 
   // Fetch and return empty and full pages into the empty and full pools.
-  bool GetValid(struct page_entry *pe);
-  bool PutValid(struct page_entry *pe);
-  bool GetEmpty(struct page_entry *pe);
-  bool PutEmpty(struct page_entry *pe);
+  bool GetValid(struct page_entry *pe, ocpdiag::results::TestStep &test_step);
+  bool PutValid(struct page_entry *pe, ocpdiag::results::TestStep &test_step);
+  bool GetEmpty(struct page_entry *pe, ocpdiag::results::TestStep &test_step);
+  bool PutEmpty(struct page_entry *pe, ocpdiag::results::TestStep &test_step);
 
-  bool GetValid(struct page_entry *pe, int32 tag);
-  bool GetEmpty(struct page_entry *pe, int32 tag);
+  bool GetValid(struct page_entry *pe, int32 tag,
+                ocpdiag::results::TestStep &test_step);
+  bool GetEmpty(struct page_entry *pe, int32 tag,
+                ocpdiag::results::TestStep &test_step);
 
   // Accessor functions.
   int verbosity() const { return verbosity_; }

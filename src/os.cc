@@ -204,13 +204,14 @@ void OsLayer::GetFeatures(TestStep &setup_step) {
 }
 
 // Enable FlushPageCache to be functional instead of a NOP.
-void OsLayer::ActivateFlushPageCache(void) {
-  logprintf(9, "Log: page cache will be flushed as needed\n");
+void OsLayer::ActivateFlushPageCache(TestStep &test_step) {
+  test_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                       .message = "Page cache will be flushed as needed"});
   use_flush_page_cache_ = true;
 }
 
 // Flush the page cache to ensure reads come from the disk.
-bool OsLayer::FlushPageCache(void) {
+bool OsLayer::FlushPageCache(TestStep &test_step) {
   if (!use_flush_page_cache_) return true;
 
   // First, ask the kernel to write the cache to the disk.
@@ -223,8 +224,10 @@ bool OsLayer::FlushPageCache(void) {
   if (dcfile < 0) {
     int err = errno;
     string errtxt = ErrorString(err);
-    logprintf(3, "Log: failed to open %s - err %d (%s)\n", drop_caches_file,
-              err, errtxt.c_str());
+    test_step.AddLog(
+        Log{.severity = LogSeverity::kWarning,
+            .message = absl::StrFormat("Failed to open %s - error code %d (%s)",
+                                       drop_caches_file, err, errtxt)});
     return false;
   }
 
@@ -234,8 +237,10 @@ bool OsLayer::FlushPageCache(void) {
   if (bytes_written != 1) {
     int err = errno;
     string errtxt = ErrorString(err);
-    logprintf(3, "Log: failed to write %s - err %d (%s)\n", drop_caches_file,
-              err, errtxt.c_str());
+    test_step.AddLog(Log{
+        .severity = LogSeverity::kWarning,
+        .message = absl::StrFormat("Failed to write to %s - error code %d (%s)",
+                                   drop_caches_file, err, errtxt)});
     return false;
   }
   return true;
@@ -336,28 +341,10 @@ cpu_set_t *OsLayer::FindCoreMask(int32 region, TestStep &test_step) {
 }
 
 // Return cores associated with a given region in hex string.
-string OsLayer::FindCoreMaskFormat(cpu_set_t* mask) {
+string OsLayer::FindCoreMaskFormat(cpu_set_t *mask) {
   string format = cpuset_format(mask);
   if (format.size() < 8) format = string(8 - format.size(), '0') + format;
   return format;
-}
-
-// Report an error in an easily parseable way.
-bool OsLayer::ErrorReport(const char *part, const char *symptom, int count) {
-  time_t now = clock_->Now();
-  int ttf = now - time_initialized_;
-  if (strlen(symptom) && strlen(part)) {
-    logprintf(0, "Report Error: %s : %s : %d : %ds\n", symptom, part, count,
-              ttf);
-  } else {
-    // Log something so the error still shows up, but this won't break the
-    // parser.
-    logprintf(0,
-              "Warning: Invalid Report Error: "
-              "%s : %s : %d : %ds\n",
-              symptom, part, count, ttf);
-  }
-  return true;
 }
 
 // Read the number of hugepages out of the kernel interface in proc.
@@ -735,7 +722,8 @@ void OsLayer::FreeTestMem() {
 }
 
 // Prepare the target memory. It may requre mapping in, or this may be a noop.
-void *OsLayer::PrepareTestMem(uint64 offset, uint64 length) {
+void *OsLayer::PrepareTestMem(uint64 offset, uint64 length,
+                              TestStep &test_step) {
   sat_assert((offset + length) <= testmemsize_);
   if (dynamic_mapped_shmem_) {
     // TODO(nsanders): Check if we can support MAP_NONBLOCK,
@@ -745,10 +733,11 @@ void *OsLayer::PrepareTestMem(uint64 offset, uint64 length) {
                          shmid_, offset);
     if (mapping == MAP_FAILED) {
       string errtxt = ErrorString(errno);
-      logprintf(0,
-                "Process Error: PrepareTestMem mmap(%llx, %llx) failed. "
-                "error: %s.\n",
-                offset, length, errtxt.c_str());
+      test_step.AddError(
+          Error{.symptom = kProcessError,
+                .message = absl::StrFormat(
+                    "PrepareTestMem mmap(%llx, %llx) failed with error: %s.",
+                    offset, length, errtxt)});
       sat_assert(0);
     }
     return mapping;
@@ -758,15 +747,17 @@ void *OsLayer::PrepareTestMem(uint64 offset, uint64 length) {
 }
 
 // Release the test memory resources, if any.
-void OsLayer::ReleaseTestMem(void *addr, uint64 offset, uint64 length) {
+void OsLayer::ReleaseTestMem(void *addr, uint64 offset, uint64 length,
+                             TestStep &test_step) {
   if (dynamic_mapped_shmem_) {
     int retval = munmap(addr, length);
     if (retval == -1) {
       string errtxt = ErrorString(errno);
-      logprintf(0,
-                "Process Error: ReleaseTestMem munmap(%p, %llx) failed. "
-                "error: %s.\n",
-                addr, length, errtxt.c_str());
+      test_step.AddError(
+          Error{.symptom = kProcessError,
+                .message = absl::StrFormat(
+                    "ReleaseTestMem munmap(%p, %llx) failed with error: %s.",
+                    addr, length, errtxt)});
       sat_assert(0);
     }
   }

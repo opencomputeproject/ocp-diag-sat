@@ -247,7 +247,6 @@ FillThread::FillThread() { num_pages_to_fill_ = 0; }
 // Initialize file name to empty.
 FileThread::FileThread() {
   filename_ = "";
-  devicename_ = "";
   pass_ = 0;
   page_io_ = true;
   crc_page_ = -1;
@@ -444,18 +443,27 @@ bool WorkerThread::BindToCpus(const cpu_set_t *thread_mask) {
 //   Returns true on success, false on error.
 bool WorkerThread::YieldSelf() { return (sched_yield() == 0); }
 
-void WorkerThread::AddLog(LogSeverity severity, string message) {
+void WorkerThread::AddLog(LogSeverity severity, const string &message) {
   test_step_->AddLog(
       Log{.severity = severity,
           .message = absl::StrFormat("%s #%d: %s", GetThreadTypeName(),
                                      thread_num_, message)});
 }
 
-void WorkerThread::AddProcessError(string message) {
+void WorkerThread::AddProcessError(const string &message) {
   test_step_->AddError(
       Error{.symptom = kProcessError,
             .message = absl::StrFormat("%s #%d: %s", GetThreadTypeName(),
                                        thread_num_, message)});
+}
+
+void WorkerThread::AddDiagnosis(const string &verdict, DiagnosisType type,
+                                const string &message) {
+  test_step_->AddDiagnosis(
+      Diagnosis{.verdict = verdict,
+                .type = type,
+                .message = absl::StrFormat("%s #%d: %s", GetThreadTypeName(),
+                                           thread_num_, message)});
 }
 
 // Fill this page with its pattern.
@@ -545,7 +553,7 @@ bool FillThread::Work() {
   struct page_entry pe;
   int64 loops = 0;
   while (IsReadyToRun() && (loops < num_pages_to_fill_)) {
-    result = result && sat_->GetEmpty(&pe);
+    result = result && sat_->GetEmpty(&pe, *test_step_);
     if (!result) {
       AddLog(LogSeverity::kError, "Failed to pop pages, exiting thread");
       break;
@@ -556,7 +564,7 @@ bool FillThread::Work() {
     if (!result) break;
 
     // Put the page back on the queue.
-    result = result && sat_->PutValid(&pe);
+    result = result && sat_->PutValid(&pe, *test_step_);
     if (!result) {
       AddLog(LogSeverity::kError, "Failed to push pages, exiting thread");
       break;
@@ -603,16 +611,15 @@ void WorkerThread::ProcessError(struct ErrorRecord *error,
 
   // Report parseable error.
   // TODO(b/273815895): Add hwinfo for cpu and dimms
-  test_step_->AddDiagnosis(Diagnosis{
-      .verdict = kMemoryCopyFailVerdict,
-      .type = DiagnosisType::kFail,
-      .message = absl::StrFormat(
+  AddDiagnosis(
+      kMemoryCopyFailVerdict, DiagnosisType::kFail,
+      absl::StrFormat(
           "%s: miscompare on CPU %d(<-%d) at %p(0x%llx:%s): "
           "read:0x%016llx, reread:0x%016llx expected:0x%016llx. '%s'%s.\n",
           message, core_id, error->lastcpu, error->vaddr, error->paddr,
           dimm_string, error->actual, error->reread, error->expected,
           (error->patternname) ? error->patternname : "None",
-          (error->reread == error->expected) ? " read error" : "")});
+          (error->reread == error->expected) ? " read error" : ""));
 
   // Overwrite incorrect data with correct data to prevent
   // future miscompares when this data is reused.
@@ -646,28 +653,24 @@ void FileThread::ProcessError(struct ErrorRecord *error, const char *message) {
   os_->FindDimm(error->paddr, dimm_string, sizeof(dimm_string));
 
   // If crc_page_ is valid, ie checking content read back from file,
-  // track src/dst memory addresses. Otherwise catagorize as general
-  // mememory miscompare for CRC checking everywhere else.
+  // track src/dst memory addresses. Otherwise categorize as general
+  // memory miscompare for CRC checking everywhere else.
+  string verdict;
   if (crc_page_ != -1) {
     int miscompare_byteoffset = static_cast<char *>(error->vbyteaddr) -
                                 static_cast<char *>(page_recs_[crc_page_].dst);
-    // TODO(b/275900374) Make this a diagnosis
-    // os_->error_diagnoser_->AddHDDMiscompareError(
-    //     devicename_, crc_page_, miscompare_byteoffset,
-    //     page_recs_[crc_page_].src, page_recs_[crc_page_].dst);
+    verdict = kHddMiscompareFailVerdict;
   } else {
-    // TODO(b/275900374) Make this a diagnosis
-    // os_->error_diagnoser_->AddMiscompareError(
-    //     dimm_string, reinterpret_cast<uint64>(error->vaddr), 1);
+    verdict = kGeneralMiscompareFailVerdict;
   }
 
-  // TODO(b/275900374) Change this to be a diagnosis
-  logprintf(0,
-            "%s: miscompare on %s at %p(0x%llx:%s): read:0x%016llx, "
-            "reread:0x%016llx expected:0x%016llx\n",
-            message, devicename_.c_str(), error->vaddr, error->paddr,
-            dimm_string, error->actual, error->reread, error->expected,
-            (error->patternname) ? error->patternname : "None");
+  AddDiagnosis(
+      verdict, DiagnosisType::kFail,
+      absl::StrFormat("%s: miscompare at %p(0x%llx:%s): read:0x%016llx, "
+                      "reread:0x%016llx expected:0x%016llx\n",
+                      message, error->vaddr, error->paddr, dimm_string,
+                      error->actual, error->reread, error->expected,
+                      (error->patternname) ? error->patternname : "None"));
 
   // Overwrite incorrect data with correct data to prevent
   // future miscompares when this data is reused.
@@ -796,8 +799,8 @@ int WorkerThread::CheckRegion(void *addr, class Pattern *pattern,
         // when processing the error queue.
         ProcessError(&recorded[0], errormessage.c_str());
         AddLog(LogSeverity::kError,
-               absl::StrFormat("Block Error: (%p) pattern %s instead of %s, "
-                               "%d bytes from offset 0x%x to 0x%x\n",
+               absl::StrFormat("Block Error: (%p) pattern %s instead of %s, %d "
+                               "bytes from offset 0x%x to 0x%x\n",
                                &memblock[badstart], altpattern->name(),
                                pattern->name(), blockerrors * wordsize_,
                                offset + badstart * wordsize_,
@@ -875,18 +878,18 @@ int WorkerThread::CrcCheckPage(struct page_entry *srcpe) {
 
     // If the CRC does not match, we'd better look closer.
     if (!crc.Equals(*expectedcrc)) {
-      logprintf(11,
-                "Log: CrcCheckPage Falling through to slow compare, "
-                "CRC mismatch %s != %s\n",
-                crc.ToHexString().c_str(), expectedcrc->ToHexString().c_str());
+      AddLog(LogSeverity::kDebug,
+             absl::StrFormat("CrcCheckPage Falling through to slow compare, "
+                             "CRC mismatch %s != %s",
+                             crc.ToHexString(), expectedcrc->ToHexString()));
       int errorcount = CheckRegion(memslice, srcpe->pattern, srcpe->lastcpu,
                                    blocksize, currentblock * blocksize, 0);
       if (errorcount == 0) {
-        logprintf(0,
-                  "Log: CrcCheckPage CRC mismatch %s != %s, "
-                  "but no miscompares found.\n",
-                  crc.ToHexString().c_str(),
-                  expectedcrc->ToHexString().c_str());
+        AddLog(
+            LogSeverity::kWarning,
+            absl::StrFormat(
+                "CrcCheckPage CRC mismatch %s != %s, but no miscompares found.",
+                crc.ToHexString(), expectedcrc->ToHexString()));
       }
       errors += errorcount;
     }
@@ -935,17 +938,15 @@ void WorkerThread::ProcessTagError(struct ErrorRecord *error,
 
   // Report parseable error.
   // TODO(b/273815895): Add hwinfo for cpu and dimms
-  test_step_->AddDiagnosis(Diagnosis{
-      .verdict = kMemoryCopyFailVerdict,
-      .type = DiagnosisType::kFail,
-      .message = absl::StrFormat(
-          "%s: Tag from %p(0x%llx:%s) (%s) "
-          "miscompare on CPU %d(0x%s) at %p(0x%llx:%s): "
-          "read:0x%016llx, reread:0x%016llx expected:0x%016llx\n",
-          message, error->tagvaddr, error->tagpaddr, tag_dimm_string,
-          read_error ? "read error" : "write error", core_id,
-          CurrentCpusFormat(), error->vaddr, error->paddr, dimm_string,
-          error->actual, error->reread, error->expected)});
+  AddDiagnosis(kMemoryCopyFailVerdict, DiagnosisType::kFail,
+               absl::StrFormat(
+                   "%s: Tag from %p(0x%llx:%s) (%s) "
+                   "miscompare on CPU %d(0x%s) at %p(0x%llx:%s): "
+                   "read:0x%016llx, reread:0x%016llx expected:0x%016llx\n",
+                   message, error->tagvaddr, error->tagpaddr, tag_dimm_string,
+                   read_error ? "read error" : "write error", core_id,
+                   CurrentCpusFormat(), error->vaddr, error->paddr, dimm_string,
+                   error->actual, error->reread, error->expected));
 
   errorcount_ += 1;
 
@@ -1401,7 +1402,7 @@ bool CheckThread::Work() {
   // We want to check all the pages, and
   // stop when there aren't any left.
   while (true) {
-    result = result && sat_->GetValid(&pe);
+    result = result && sat_->GetValid(&pe, *test_step_);
     if (!result) {
       if (IsReadyToRunNoPause())
         logprintf(0,
@@ -1418,9 +1419,9 @@ bool CheckThread::Work() {
     // Push pages back on the valid queue if we are still going,
     // throw them out otherwise.
     if (IsReadyToRunNoPause())
-      result = result && sat_->PutValid(&pe);
+      result = result && sat_->PutValid(&pe, *test_step_);
     else
-      result = result && sat_->PutEmpty(&pe);
+      result = result && sat_->PutEmpty(&pe, *test_step_);
     if (!result) {
       logprintf(0,
                 "Process Error: check_thread failed to push pages, "
@@ -1453,8 +1454,8 @@ bool CopyThread::Work() {
 
   while (IsReadyToRun()) {
     // Pop the needed pages.
-    result = result && sat_->GetValid(&src, tag_);
-    result = result && sat_->GetEmpty(&dst, tag_);
+    result = result && sat_->GetValid(&src, tag_, *test_step_);
+    result = result && sat_->GetEmpty(&dst, tag_, *test_step_);
     if (!result) {
       AddProcessError("Failed to pop pages");
       break;
@@ -1480,8 +1481,8 @@ bool CopyThread::Work() {
       dst.lastcpu = sched_getcpu();
     }
 
-    result = result && sat_->PutValid(&dst);
-    result = result && sat_->PutEmpty(&src);
+    result = result && sat_->PutValid(&dst, *test_step_);
+    result = result && sat_->PutEmpty(&src, *test_step_);
 
     // Copy worker-threads yield themselves at the end of each copy loop,
     // to avoid threads from preempting each other in the middle of the inner
@@ -1515,7 +1516,7 @@ bool InvertThread::Work() {
 
   while (IsReadyToRun()) {
     // Pop the needed pages.
-    result = result && sat_->GetValid(&src);
+    result = result && sat_->GetValid(&src, *test_step_);
     if (!result) {
       logprintf(0,
                 "Process Error: invert_thread failed to pop pages, "
@@ -1540,7 +1541,7 @@ bool InvertThread::Work() {
 
     if (sat_->strict()) CrcCheckPage(&src);
 
-    result = result && sat_->PutValid(&src);
+    result = result && sat_->PutValid(&src, *test_step_);
     if (!result) {
       logprintf(0,
                 "Process Error: invert_thread failed to push pages, "
@@ -1558,9 +1559,8 @@ bool InvertThread::Work() {
 }
 
 // Set file name to use for File IO.
-void FileThread::SetFile(const char *filename_init) {
+void FileThread::SetFile(const string &filename_init) {
   filename_ = filename_init;
-  devicename_ = os_->FindFileDevice(filename_);
 }
 
 // Open the file for access.
@@ -1569,11 +1569,11 @@ bool FileThread::OpenFile(int *pfile) {
   int fd = open(filename_.c_str(), flags | O_DIRECT, 0644);
   if (O_DIRECT != 0 && fd < 0 && errno == EINVAL) {
     fd = open(filename_.c_str(), flags, 0644);  // Try without O_DIRECT
-    os_->ActivateFlushPageCache();  // Not using O_DIRECT fixed EINVAL
+    os_->ActivateFlushPageCache(
+        *test_step_);  // Not using O_DIRECT fixed EINVAL
   }
   if (fd < 0) {
-    logprintf(0, "Process Error: Failed to create file %s!!\n",
-              filename_.c_str());
+    AddProcessError(absl::StrFormat("Failed to create file %s", filename_));
     pages_copied_ = 0;
     return false;
   }
@@ -1610,11 +1610,11 @@ bool FileThread::WritePageToFile(int fd, struct page_entry *src) {
   int64 size = write(fd, src->addr, page_length);
 
   if (size != page_length) {
-    os_->ErrorReport(devicename_.c_str(), "write-error", 1);
+    AddDiagnosis(kFileWriteFailVerdict, DiagnosisType::kFail,
+                 "Failed to write page to file.");
     errorcount_++;
-    logprintf(0,
-              "Block Error: file_thread failed to write, "
-              "bailing\n");
+    AddLog(LogSeverity::kWarning,
+           "Block Error: file_thread failed to write, bailing");
     return false;
   }
   return true;
@@ -1644,7 +1644,8 @@ bool FileThread::WritePages(int fd) {
 
     if (!result) return false;
   }
-  return os_->FlushPageCache();  // If O_DIRECT worked, this will be a NOP.
+  return os_->FlushPageCache(
+      *test_step_);  // If O_DIRECT worked, this will be a NOP.
 }
 
 // Copy data from file into memory block.
@@ -1654,10 +1655,10 @@ bool FileThread::ReadPageFromFile(int fd, struct page_entry *dst) {
   // Do the actual read.
   int64 size = read(fd, dst->addr, page_length);
   if (size != page_length) {
-    os_->ErrorReport(devicename_.c_str(), "read-error", 1);
-    logprintf(0,
-              "Block Error: file_thread failed to read, "
-              "bailing\n");
+    AddDiagnosis(kFileReadFailVerdict, DiagnosisType::kFail,
+                 "Faile to read page from file.");
+    AddLog(LogSeverity::kWarning,
+           "Block Error: file_thread failed to read, bailing");
     errorcount_++;
     return false;
   }
@@ -1712,20 +1713,15 @@ bool FileThread::SectorValidatePage(const struct PageRec &page,
 
       // Run sector tag error through diagnoser for logging and reporting.
       errorcount_ += 1;
-      // TODO(b/275900374) Make this a diagnosis
-      // os_->error_diagnoser_->AddHDDSectorTagError(devicename_,
-      // tag[sec].block,
-      //                                             offset, tag[sec].sector,
-      //                                             page.src, page.dst);
-
-      errorcount_ += 1;
-      logprintf(5,
-                "Sector Error: Sector tag @ 0x%x, pass %d/%d. "
-                "sec %x/%x, block %d/%d, magic %x/%x, File: %s \n",
-                block * page_length + 512 * sec, (pass_ & 0xff),
-                (unsigned int)tag[sec].pass, sec, (unsigned int)tag[sec].sector,
-                block, (unsigned int)tag[sec].block, magic,
-                (unsigned int)tag[sec].magic, filename_.c_str());
+      AddDiagnosis(
+          kHddSectorTagFailVerdict, DiagnosisType::kFail,
+          absl::StrFormat("Sector Error: Sector tag @ 0x%x, pass %d/%d. sec "
+                          "%x/%x, block %d/%d, magic %x/%x, File: %s \n",
+                          block * page_length + 512 * sec, (pass_ & 0xff),
+                          (unsigned int)tag[sec].pass, sec,
+                          (unsigned int)tag[sec].sector, block,
+                          (unsigned int)tag[sec].block, magic,
+                          (unsigned int)tag[sec].magic, filename_));
 
       // Keep track of first and last bad sector.
       if (firstsector == -1) firstsector = (block * page_length / 512) + sec;
@@ -1739,9 +1735,10 @@ bool FileThread::SectorValidatePage(const struct PageRec &page,
 
   // If we found sector errors:
   if (badsector == true) {
-    logprintf(5, "Log: file sector miscompare at offset %x-%x. File: %s\n",
-              firstsector * 512, ((lastsector + 1) * 512) - 1,
-              filename_.c_str());
+    AddLog(LogSeverity::kWarning,
+           absl::StrFormat("File sector miscompare at offset %x-%x. File: %s",
+                           firstsector * 512, ((lastsector + 1) * 512) - 1,
+                           filename_));
 
     // Either exit immediately, or patch the data up and continue.
     if (sat_->stop_on_error()) {
@@ -1775,10 +1772,7 @@ bool FileThread::PagePrepare() {
     int result = (local_page_ == 0);
 #endif
     if (result) {
-      logprintf(0,
-                "Process Error: disk thread posix_memalign "
-                "returned %d (fail)\n",
-                result);
+      AddProcessError(absl::StrFormat("memalign returned %d (fail)", result));
       status_ = false;
       return false;
     }
@@ -1798,7 +1792,7 @@ bool FileThread::PageTeardown() {
 // Get memory for an incoming data transfer..
 bool FileThread::GetEmptyPage(struct page_entry *dst) {
   if (page_io_) {
-    if (!sat_->GetEmpty(dst)) return false;
+    if (!sat_->GetEmpty(dst, *test_step_)) return false;
   } else {
     dst->addr = local_page_;
     dst->offset = 0;
@@ -1811,7 +1805,7 @@ bool FileThread::GetEmptyPage(struct page_entry *dst) {
 // Get memory for an outgoing data transfer..
 bool FileThread::GetValidPage(struct page_entry *src) {
   struct page_entry tmp;
-  if (!sat_->GetValid(&tmp)) return false;
+  if (!sat_->GetValid(&tmp, *test_step_)) return false;
   if (page_io_) {
     *src = tmp;
     return true;
@@ -1819,7 +1813,7 @@ bool FileThread::GetValidPage(struct page_entry *src) {
     src->addr = local_page_;
     src->offset = 0;
     CrcCopyPage(src, &tmp);
-    if (!sat_->PutValid(&tmp)) return false;
+    if (!sat_->PutValid(&tmp, *test_step_)) return false;
   }
   return true;
 }
@@ -1827,7 +1821,7 @@ bool FileThread::GetValidPage(struct page_entry *src) {
 // Throw out a used empty page.
 bool FileThread::PutEmptyPage(struct page_entry *src) {
   if (page_io_) {
-    if (!sat_->PutEmpty(src)) return false;
+    if (!sat_->PutEmpty(src, *test_step_)) return false;
   }
   return true;
 }
@@ -1835,7 +1829,7 @@ bool FileThread::PutEmptyPage(struct page_entry *src) {
 // Throw out a used, filled page.
 bool FileThread::PutValidPage(struct page_entry *src) {
   if (page_io_) {
-    if (!sat_->PutValid(src)) return false;
+    if (!sat_->PutValid(src, *test_step_)) return false;
   }
   return true;
 }
@@ -1871,11 +1865,10 @@ bool FileThread::ReadPages(int fd) {
       crc_page_ = i;
       int errors = CrcCheckPage(&dst);
       if (errors) {
-        logprintf(5,
-                  "Log: file miscompare at block %d, "
-                  "offset %x-%x. File: %s\n",
-                  i, i * page_length, ((i + 1) * page_length) - 1,
-                  filename_.c_str());
+        AddLog(LogSeverity::kWarning,
+               absl::StrFormat(
+                   "File miscompare at block %d, offset %x-%x. File: %s\n", i,
+                   i * page_length, ((i + 1) * page_length) - 1, filename_));
         result = false;
       }
       crc_page_ = -1;
@@ -1891,8 +1884,8 @@ bool FileThread::Work() {
   bool result = true;
   int64 loops = 0;
 
-  logprintf(9, "Log: Starting file thread %d, file %s, device %s\n",
-            thread_num_, filename_.c_str(), devicename_.c_str());
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat("Starting file thread using file: %s", filename_));
 
   if (!PagePrepare()) {
     status_ = false;
@@ -1932,8 +1925,9 @@ bool FileThread::Work() {
   CloseFile(fd);
   PageTeardown();
 
-  logprintf(9, "Log: Completed %d: file thread status %d, %d pages copied\n",
-            thread_num_, status_, pages_copied_);
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat("Completed %d: file thread status %d, %d pages copied",
+                         thread_num_, status_, pages_copied_));
   // Failure to read from device indicates hardware,
   // rather than procedural SW error.
   status_ = true;
@@ -2157,8 +2151,8 @@ bool NetworkThread::Work() {
   while (IsReadyToRun()) {
     struct page_entry src;
     struct page_entry dst;
-    result = result && sat_->GetValid(&src);
-    result = result && sat_->GetEmpty(&dst);
+    result = result && sat_->GetValid(&src, *test_step_);
+    result = result && sat_->GetEmpty(&dst, *test_step_);
     if (!result) {
       logprintf(0,
                 "Process Error: net_thread failed to pop pages, "
@@ -2183,8 +2177,8 @@ bool NetworkThread::Work() {
     if (strict) CrcCheckPage(&dst);
 
     // Return all of our pages to the queue.
-    result = result && sat_->PutValid(&dst);
-    result = result && sat_->PutEmpty(&src);
+    result = result && sat_->PutValid(&dst, *test_step_);
+    result = result && sat_->PutEmpty(&src, *test_step_);
     if (!result) {
       logprintf(0,
                 "Process Error: net_thread failed to push pages, "
@@ -2661,7 +2655,7 @@ bool DiskThread::OpenDevice(int *pfile) {
   int fd = open(device_name_.c_str(), flags | O_DIRECT, 0);
   if (O_DIRECT != 0 && fd < 0 && errno == EINVAL) {
     fd = open(device_name_.c_str(), flags, 0);  // Try without O_DIRECT
-    os_->ActivateFlushPageCache();
+    os_->ActivateFlushPageCache(*test_step_);
   }
   if (fd < 0) {
     logprintf(0, "Process Error: Failed to open device %s (thread %d)!!\n",
@@ -2696,7 +2690,8 @@ bool DiskThread::GetDiskSize(int fd) {
 
     // Zero size indicates nonworking device..
     if (block_size == 0) {
-      os_->ErrorReport(device_name_.c_str(), "device-size-zero", 1);
+      // TODO(b/274523023) Change this to a diagnosis
+      // os_->ErrorReport(device_name_.c_str(), "device-size-zero", 1);
       ++errorcount_;
       status_ = true;  // Avoid a procedural error.
       return false;
@@ -2820,7 +2815,8 @@ bool DiskThread::DoWork(int fd) {
 
       in_flight_sectors_.push(block);
     }
-    if (!os_->FlushPageCache())  // If O_DIRECT worked, this will be a NOP.
+    if (!os_->FlushPageCache(
+            *test_step_))  // If O_DIRECT worked, this will be a NOP.
       return false;
 
     // Verify blocks on disk.
@@ -2893,7 +2889,8 @@ bool DiskThread::AsyncDiskIO(IoOp op, int fd, void *buf, int64 size,
       logprintf(5, "Log: %s interrupted on disk %s (thread %d).\n",
                 operations[op].op_str, device_name_.c_str(), thread_num_);
     } else {
-      os_->ErrorReport(device_name_.c_str(), operations[op].error_str, 1);
+      // TODO(b/274523023) Convert this to a diagnosis
+      // os_->ErrorReport(device_name_.c_str(), operations[op].error_str, 1);
       errorcount_ += 1;
       logprintf(0,
                 "Hardware Error: Timeout doing async %s to sectors "
@@ -2926,7 +2923,8 @@ bool DiskThread::AsyncDiskIO(IoOp op, int fd, void *buf, int64 size,
   // error if < 0, I think.
   if (event.res != static_cast<uint64>(size)) {
     errorcount_++;
-    os_->ErrorReport(device_name_.c_str(), operations[op].error_str, 1);
+    // TODO(b/274523023) Convert this to a diagnosis
+    // os_->ErrorReport(device_name_.c_str(), operations[op].error_str, 1);
 
     int64 result = static_cast<int64>(event.res);
     if (result < 0) {
@@ -2968,7 +2966,7 @@ bool DiskThread::WriteBlockToDisk(int fd, BlockData *block) {
 
   // Fill block buffer with a pattern
   struct page_entry pe;
-  if (!sat_->GetValid(&pe)) {
+  if (!sat_->GetValid(&pe, *test_step_)) {
     // Even though a valid page could not be obatined, it is not an error
     // since we can always fill in a pattern directly, albeit slower.
     unsigned int *memblock = static_cast<unsigned int *>(block_buffer_);
@@ -2985,7 +2983,7 @@ bool DiskThread::WriteBlockToDisk(int fd, BlockData *block) {
   } else {
     memcpy(block_buffer_, pe.addr, block->size());
     block->set_pattern(pe.pattern);
-    sat_->PutValid(&pe);
+    sat_->PutValid(&pe, *test_step_);
   }
 
   logprintf(12,
@@ -3081,7 +3079,8 @@ bool DiskThread::ValidateBlockOnDisk(int fd, BlockData *block) {
     if (!non_destructive_) {
       if (CheckRegion(block_buffer_, block->pattern(), 0, current_bytes, 0,
                       bytes_read)) {
-        os_->ErrorReport(device_name_.c_str(), "disk-pattern-error", 1);
+        // TODO(b/274523023) Convert this to a diagnosis
+        // os_->ErrorReport(device_name_.c_str(), "disk-pattern-error", 1);
         errorcount_ += 1;
         logprintf(0,
                   "Hardware Error: Pattern mismatch in block starting at "
@@ -3286,7 +3285,7 @@ bool MemoryRegionThread::Work() {
   while (IsReadyToRun()) {
     // Getting pages from SAT and queue.
     phase_ = kPhaseNoPhase;
-    result = result && sat_->GetValid(&source_pe);
+    result = result && sat_->GetValid(&source_pe, *test_step_);
     if (!result) {
       logprintf(0,
                 "Process Error: memory region thread failed to pop "
@@ -3330,7 +3329,7 @@ bool MemoryRegionThread::Work() {
 
     phase_ = kPhaseNoPhase;
     // Storing pages on their proper queues.
-    result = result && sat_->PutValid(&source_pe);
+    result = result && sat_->PutValid(&source_pe, *test_step_);
     if (!result) {
       logprintf(0,
                 "Process Error: memory region thread failed to push "
