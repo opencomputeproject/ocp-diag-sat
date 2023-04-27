@@ -61,7 +61,12 @@ using ::ocpdiag::results::DiagnosisType;
 using ::ocpdiag::results::Error;
 using ::ocpdiag::results::Log;
 using ::ocpdiag::results::LogSeverity;
+using ::ocpdiag::results::MeasurementSeries;
+using ::ocpdiag::results::MeasurementSeriesElement;
+using ::ocpdiag::results::MeasurementSeriesStart;
 using ::ocpdiag::results::TestStep;
+using ::ocpdiag::results::Validator;
+using ::ocpdiag::results::ValidatorType;
 
 // Syscalls
 // Why ubuntu, do you hate gettid so bad?
@@ -2532,10 +2537,8 @@ bool DiskThread::SetParameters(int read_block_size, int write_block_size,
   if (read_block_size != -1) {
     // Blocks must be aligned to the disk's sector size.
     if (read_block_size % kSectorSize != 0) {
-      logprintf(0,
-                "Process Error: Block size must be a multiple of %d "
-                "(thread %d).\n",
-                kSectorSize, thread_num_);
+      AddProcessError(absl::StrFormat(
+          "Block size must be a multiple of sector size %d", kSectorSize));
       return false;
     }
 
@@ -2546,17 +2549,16 @@ bool DiskThread::SetParameters(int read_block_size, int write_block_size,
     // Write blocks must be aligned to the disk's sector size and to the
     // block size.
     if (write_block_size % kSectorSize != 0) {
-      logprintf(0,
-                "Process Error: Write block size must be a multiple "
-                "of %d (thread %d).\n",
-                kSectorSize, thread_num_);
+      AddProcessError(absl::StrFormat(
+          "Write block size must be a multiple of sector size %d",
+          kSectorSize));
       return false;
     }
     if (write_block_size % read_block_size_ != 0) {
-      logprintf(0,
-                "Process Error: Write block size must be a multiple "
-                "of the read block size, which is %d (thread %d).\n",
-                read_block_size_, thread_num_);
+      AddProcessError(
+          absl::StrFormat("Write block size %d must be a multiple of of the "
+                          "read block size, which is %d",
+                          write_block_size, read_block_size_));
       return false;
     }
 
@@ -2565,18 +2567,17 @@ bool DiskThread::SetParameters(int read_block_size, int write_block_size,
   } else {
     // Make sure write_block_size_ is still valid.
     if (read_block_size_ > write_block_size_) {
-      logprintf(5,
-                "Log: Assuming write block size equal to read block size, "
-                "which is %d (thread %d).\n",
-                read_block_size_, thread_num_);
+      AddLog(LogSeverity::kDebug,
+             absl::StrFormat("Assuming write block %d size equal to read block "
+                             "size which is %d",
+                             write_block_size, read_block_size_));
       write_block_size_ = read_block_size_;
     } else {
       if (write_block_size_ % read_block_size_ != 0) {
-        logprintf(0,
-                  "Process Error: Write block size (defined as %d) must "
-                  "be a multiple of the read block size, which is %d "
-                  "(thread %d).\n",
-                  write_block_size_, read_block_size_, thread_num_);
+        AddProcessError(
+            absl::StrFormat("Write block size %d must be a multiple of of the "
+                            "read block size, which is %d",
+                            write_block_size, read_block_size_));
         return false;
       }
     }
@@ -2588,10 +2589,7 @@ bool DiskThread::SetParameters(int read_block_size, int write_block_size,
 
   if (blocks_per_segment != -1) {
     if (blocks_per_segment <= 0) {
-      logprintf(0,
-                "Process Error: Blocks per segment must be greater than "
-                "zero.\n (thread %d)",
-                thread_num_);
+      AddProcessError("Blocks per segment must be greater than zero");
       return false;
     }
 
@@ -2600,10 +2598,7 @@ bool DiskThread::SetParameters(int read_block_size, int write_block_size,
 
   if (read_threshold != -1) {
     if (read_threshold <= 0) {
-      logprintf(0,
-                "Process Error: Read threshold must be greater than "
-                "zero (thread %d).\n",
-                thread_num_);
+      AddProcessError("Read threshold must be greater than zero");
       return false;
     }
 
@@ -2612,10 +2607,7 @@ bool DiskThread::SetParameters(int read_block_size, int write_block_size,
 
   if (write_threshold != -1) {
     if (write_threshold <= 0) {
-      logprintf(0,
-                "Process Error: Write threshold must be greater than "
-                "zero (thread %d).\n",
-                thread_num_);
+      AddProcessError("Write threshold must be greater than zero");
       return false;
     }
 
@@ -2625,10 +2617,9 @@ bool DiskThread::SetParameters(int read_block_size, int write_block_size,
   if (segment_size != -1) {
     // Segments must be aligned to the disk's sector size.
     if (segment_size % kSectorSize != 0) {
-      logprintf(0,
-                "Process Error: Segment size must be a multiple of %d"
-                " (thread %d).\n",
-                kSectorSize, thread_num_);
+      AddProcessError(absl::StrFormat(
+          "The segment size %d must be a multiple of the sector size %d",
+          segment_size, kSectorSize));
       return false;
     }
 
@@ -2658,8 +2649,7 @@ bool DiskThread::OpenDevice(int *pfile) {
     os_->ActivateFlushPageCache(*test_step_);
   }
   if (fd < 0) {
-    logprintf(0, "Process Error: Failed to open device %s (thread %d)!!\n",
-              device_name_.c_str(), thread_num_);
+    AddProcessError(absl::StrFormat("Failed to open device %s", device_name_));
     return false;
   }
   *pfile = fd;
@@ -2672,8 +2662,7 @@ bool DiskThread::OpenDevice(int *pfile) {
 bool DiskThread::GetDiskSize(int fd) {
   struct stat device_stat;
   if (fstat(fd, &device_stat) == -1) {
-    logprintf(0, "Process Error: Unable to fstat disk %s (thread %d).\n",
-              device_name_.c_str(), thread_num_);
+    AddProcessError(absl::StrFormat("Unable to fstat disk %s", device_name_));
     return false;
   }
 
@@ -2683,15 +2672,16 @@ bool DiskThread::GetDiskSize(int fd) {
     uint64 block_size = 0;
 
     if (ioctl(fd, BLKGETSIZE64, &block_size) == -1) {
-      logprintf(0, "Process Error: Unable to ioctl disk %s (thread %d).\n",
-                device_name_.c_str(), thread_num_);
+      AddProcessError(absl::StrFormat("Unable to ioctl disk %s", device_name_));
       return false;
     }
 
     // Zero size indicates nonworking device..
     if (block_size == 0) {
-      // TODO(b/274523023) Change this to a diagnosis
-      // os_->ErrorReport(device_name_.c_str(), "device-size-zero", 1);
+      AddDiagnosis(kDeviceSizeZeroFailVerdict, DiagnosisType::kFail,
+                   absl::StrFormat("%s has a block size of zero, which "
+                                   "indicates a non working device",
+                                   device_name_));
       ++errorcount_;
       status_ = true;  // Avoid a procedural error.
       return false;
@@ -2703,15 +2693,13 @@ bool DiskThread::GetDiskSize(int fd) {
     device_sectors_ = device_stat.st_size / kSectorSize;
 
   } else {
-    logprintf(0,
-              "Process Error: %s is not a regular file or block "
-              "device (thread %d).\n",
-              device_name_.c_str(), thread_num_);
+    AddProcessError(
+        absl::StrFormat("%s is not a regular file or block", device_name_));
     return false;
   }
 
-  logprintf(12, "Log: Device sectors: %lld on disk %s (thread %d).\n",
-            device_sectors_, device_name_.c_str(), thread_num_);
+  AddLog(LogSeverity::kDebug, absl::StrFormat("Device sectors: %lld on disk %s",
+                                              device_sectors_, device_name_));
 
   if (update_block_table_) {
     block_table_->SetParameters(kSectorSize, write_block_size_, device_sectors_,
@@ -2764,20 +2752,40 @@ bool DiskThread::DoWork(int fd) {
   //                unplugged is causing the application and kernel to
   //                become unresponsive.
 
+  read_times_ = std::make_unique<MeasurementSeries>(
+      MeasurementSeriesStart{
+          .name = absl::StrFormat("%s read times", device_name_),
+          .unit = "us",
+          .validators = {Validator{
+              .type = ValidatorType::kLessThanOrEqual,
+              .value = {static_cast<double>(read_threshold_)}}},
+      },
+      *test_step_);
+  write_times_ = std::make_unique<MeasurementSeries>(
+      MeasurementSeriesStart{
+          .name = absl::StrFormat("%s write times", device_name_),
+          .unit = "us",
+          .validators = {Validator{
+              .type = ValidatorType::kLessThanOrEqual,
+              .value = {static_cast<double>(write_threshold_)}}},
+      },
+      *test_step_);
+
   while (IsReadyToRun()) {
     // Write blocks to disk.
-    logprintf(16, "Log: Write phase %sfor disk %s (thread %d).\n",
-              non_destructive_ ? "(disabled) " : "", device_name_.c_str(),
-              thread_num_);
+    AddLog(
+        LogSeverity::kDebug,
+        absl::StrFormat("Write phase %sfor disk %s",
+                        non_destructive_ ? "(disabled) " : "", device_name_));
     while (IsReadyToRunNoPause() &&
            in_flight_sectors_.size() < static_cast<size_t>(queue_size_ + 1)) {
       // Confine testing to a particular segment of the disk.
       int64 segment = (block_num / blocks_per_segment_) % num_segments;
       if (!non_destructive_ && (block_num % blocks_per_segment_ == 0)) {
-        logprintf(20,
-                  "Log: Starting to write segment %lld out of "
-                  "%lld on disk %s (thread %d).\n",
-                  segment, num_segments, device_name_.c_str(), thread_num_);
+        AddLog(LogSeverity::kDebug,
+               absl::StrFormat(
+                   "Starting to write segment %lld out of %lld on disk %s",
+                   segment, num_segments, device_name_));
       }
       block_num++;
 
@@ -2820,8 +2828,8 @@ bool DiskThread::DoWork(int fd) {
       return false;
 
     // Verify blocks on disk.
-    logprintf(20, "Log: Read phase for disk %s (thread %d).\n",
-              device_name_.c_str(), thread_num_);
+    AddLog(LogSeverity::kDebug,
+           absl::StrFormat("Read phase for disk %s", device_name_));
     while (IsReadyToRunNoPause() && !in_flight_sectors_.empty()) {
       BlockData *block = in_flight_sectors_.front();
       in_flight_sectors_.pop();
@@ -2867,11 +2875,9 @@ bool DiskThread::AsyncDiskIO(IoOp op, int fd, void *buf, int64 size,
     int error = errno;
     char buf[256];
     sat_strerror(error, buf, sizeof(buf));
-    logprintf(0,
-              "Process Error: Unable to submit async %s "
-              "on disk %s (thread %d). Error %d, %s\n",
-              operations[op].op_str, device_name_.c_str(), thread_num_, error,
-              buf);
+    AddProcessError(absl::StrFormat(
+        "Unable to submit async %s on disk %s. Error code %d, %s",
+        operations[op].op_str, device_name_, error, buf));
     return false;
   }
 
@@ -2886,17 +2892,15 @@ bool DiskThread::AsyncDiskIO(IoOp op, int fd, void *buf, int64 size,
     // but still log it.
     int error = errno;
     if (error == EINTR) {
-      logprintf(5, "Log: %s interrupted on disk %s (thread %d).\n",
-                operations[op].op_str, device_name_.c_str(), thread_num_);
+      AddLog(LogSeverity::kDebug,
+             absl::StrFormat("%s interrupted on disk %s", operations[op].op_str,
+                             device_name_));
     } else {
-      // TODO(b/274523023) Convert this to a diagnosis
-      // os_->ErrorReport(device_name_.c_str(), operations[op].error_str, 1);
-      errorcount_ += 1;
-      logprintf(0,
-                "Hardware Error: Timeout doing async %s to sectors "
-                "starting at %lld on disk %s (thread %d).\n",
-                operations[op].op_str, offset / kSectorSize,
-                device_name_.c_str(), thread_num_);
+      AddDiagnosis(
+          kDiskAsyncOperationTimeoutFailVerdict, DiagnosisType::kFail,
+          absl::StrFormat(
+              "Timeout doing async %s to sectors starting at %lld on disk %s",
+              operations[op].op_str, offset / kSectorSize, device_name_));
     }
 
     // Don't bother checking return codes since io_cancel seems to always fail.
@@ -2910,10 +2914,9 @@ bool DiskThread::AsyncDiskIO(IoOp op, int fd, void *buf, int64 size,
       int error = errno;
       char buf[256];
       sat_strerror(error, buf, sizeof(buf));
-      logprintf(0,
-                "Process Error: Unable to create aio context on disk %s"
-                " (thread %d) Error %d, %s\n",
-                device_name_.c_str(), thread_num_, error, buf);
+      AddProcessError(absl::StrFormat(
+          "Unable to create aio context on disk %s Error %d, %s", device_name_,
+          error, buf));
     }
 
     return false;
@@ -2923,33 +2926,34 @@ bool DiskThread::AsyncDiskIO(IoOp op, int fd, void *buf, int64 size,
   // error if < 0, I think.
   if (event.res != static_cast<uint64>(size)) {
     errorcount_++;
-    // TODO(b/274523023) Convert this to a diagnosis
-    // os_->ErrorReport(device_name_.c_str(), operations[op].error_str, 1);
+    string message;
+    string verdict;
 
     int64 result = static_cast<int64>(event.res);
     if (result < 0) {
       switch (result) {
         case -EIO:
-          logprintf(0,
-                    "Hardware Error: Low-level I/O error while doing %s to "
-                    "sectors starting at %lld on disk %s (thread %d).\n",
-                    operations[op].op_str, offset / kSectorSize,
-                    device_name_.c_str(), thread_num_);
+          message = absl::StrFormat(
+              "Low-level I/O error while doing %s to sectors starting at %lld "
+              "on disk %s",
+              operations[op].op_str, offset / kSectorSize, device_name_);
+          verdict = kDiskLowLevelIOFailVerdict;
           break;
         default:
-          logprintf(0,
-                    "Hardware Error: Unknown error while doing %s to "
-                    "sectors starting at %lld on disk %s (thread %d).\n",
-                    operations[op].op_str, offset / kSectorSize,
-                    device_name_.c_str(), thread_num_);
+          message = absl::StrFormat(
+              "Unknown error while doing %s to sectors starting at %lld on "
+              "disk %s",
+              operations[op].op_str, offset / kSectorSize, device_name_);
+          verdict = kDiskUnknownFailVerdict;
       }
     } else {
-      logprintf(0,
-                "Hardware Error: Unable to %s to sectors starting at "
-                "%lld on disk %s (thread %d).\n",
-                operations[op].op_str, offset / kSectorSize,
-                device_name_.c_str(), thread_num_);
+      message = absl::StrFormat(
+          "Unable to %s to sectors starting at %lld on disk %s",
+          operations[op].op_str, offset / kSectorSize, device_name_);
+      verdict = kDiskUnknownFailVerdict;
     }
+
+    AddDiagnosis(verict, DiagnosisType::kFail, message);
     return false;
   }
 
@@ -2972,10 +2976,10 @@ bool DiskThread::WriteBlockToDisk(int fd, BlockData *block) {
     unsigned int *memblock = static_cast<unsigned int *>(block_buffer_);
     block->set_pattern(patternlist_->GetRandomPattern());
 
-    logprintf(11,
-              "Log: Warning, using pattern fill fallback in "
-              "DiskThread::WriteBlockToDisk on disk %s (thread %d).\n",
-              device_name_.c_str(), thread_num_);
+    AddLog(LogSeverity::kWarning,
+           absl::StrFormat("Using pattern fill fallback in "
+                           "DiskThread::WriteBlockToDisk on disk %s.",
+                           device_name_));
 
     for (unsigned int i = 0; i < block->size() / wordsize_; i++) {
       memblock[i] = block->pattern()->pattern(i);
@@ -2986,11 +2990,10 @@ bool DiskThread::WriteBlockToDisk(int fd, BlockData *block) {
     sat_->PutValid(&pe, *test_step_);
   }
 
-  logprintf(12,
-            "Log: Writing %lld sectors starting at %lld on disk %s"
-            " (thread %d).\n",
-            block->size() / kSectorSize, block->address(), device_name_.c_str(),
-            thread_num_);
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat("Writing %lld sectors starting at %lld on disk %s",
+                         block->size() / kSectorSize, block->address(),
+                         device_name_));
 
   int64 start_time = GetTime();
 
@@ -3000,15 +3003,8 @@ bool DiskThread::WriteBlockToDisk(int fd, BlockData *block) {
   }
 
   int64 end_time = GetTime();
-  logprintf(12, "Log: Writing time: %lld us (thread %d).\n",
-            end_time - start_time, thread_num_);
-  if (end_time - start_time > write_threshold_) {
-    logprintf(5,
-              "Log: Write took %lld us which is longer than threshold "
-              "%lld us on disk %s (thread %d).\n",
-              end_time - start_time, write_threshold_, device_name_.c_str(),
-              thread_num_);
-  }
+  write_times_->AddElement(MeasurementSeriesElement{
+      .value = static_cast<double>(end_time - start_time)});
 
   return true;
 }
@@ -3023,19 +3019,17 @@ bool DiskThread::ValidateBlockOnDisk(int fd, BlockData *block) {
   int64 current_bytes;
   uint64 address = block->address();
 
-  logprintf(20,
-            "Log: Reading sectors starting at %lld on disk %s "
-            "(thread %d).\n",
-            address, device_name_.c_str(), thread_num_);
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat("Reading sectors starting at %lld on disk %s", address,
+                         device_name_));
 
   // Read block from disk and time the read.  If it takes longer than the
   // threshold, complain.
   if (lseek(fd, address * kSectorSize, SEEK_SET) == -1) {
-    logprintf(0,
-              "Process Error: Unable to seek to sector %lld in "
-              "DiskThread::ValidateSectorsOnDisk on disk %s "
-              "(thread %d).\n",
-              address, device_name_.c_str(), thread_num_);
+    AddProcessError(
+        absl::StrFormat("Unable to seek to sector %lld in "
+                        "DiskThread::ValidateSectorsOnDisk on disk %s",
+                        address, device_name_));
     return false;
   }
   int64 start_time = GetTime();
@@ -3051,12 +3045,12 @@ bool DiskThread::ValidateBlockOnDisk(int fd, BlockData *block) {
 
     memset(block_buffer_, 0, current_bytes);
 
-    logprintf(20,
-              "Log: Reading %lld sectors starting at sector %lld on "
-              "disk %s (thread %d)\n",
-              current_bytes / kSectorSize,
-              (address * kSectorSize + bytes_read) / kSectorSize,
-              device_name_.c_str(), thread_num_);
+    AddLog(
+        LogSeverity::kDebug,
+        absl::StrFormat(
+            "Reading %lld sectors starting at sector %lld on disk %s",
+            current_bytes / kSectorSize,
+            (address * kSectorSize + bytes_read) / kSectorSize, device_name_));
 
     if (!AsyncDiskIO(ASYNC_IO_READ, fd, block_buffer_, current_bytes,
                      address * kSectorSize + bytes_read, write_timeout_)) {
@@ -3064,29 +3058,19 @@ bool DiskThread::ValidateBlockOnDisk(int fd, BlockData *block) {
     }
 
     int64 end_time = GetTime();
-    logprintf(20, "Log: Reading time: %lld us (thread %d).\n",
-              end_time - start_time, thread_num_);
-    if (end_time - start_time > read_threshold_) {
-      logprintf(5,
-                "Log: Read took %lld us which is longer than threshold "
-                "%lld us on disk %s (thread %d).\n",
-                end_time - start_time, read_threshold_, device_name_.c_str(),
-                thread_num_);
-    }
+    read_times_->AddElement(MeasurementSeriesElement{
+        .value = static_cast<double>(end_time - start_time)});
 
     // In non-destructive mode, don't compare the block to the pattern since
     // the block was never written to disk in the first place.
     if (!non_destructive_) {
       if (CheckRegion(block_buffer_, block->pattern(), 0, current_bytes, 0,
                       bytes_read)) {
-        // TODO(b/274523023) Convert this to a diagnosis
-        // os_->ErrorReport(device_name_.c_str(), "disk-pattern-error", 1);
-        errorcount_ += 1;
-        logprintf(0,
-                  "Hardware Error: Pattern mismatch in block starting at "
-                  "sector %lld in DiskThread::ValidateSectorsOnDisk on "
-                  "disk %s (thread %d).\n",
-                  address, device_name_.c_str(), thread_num_);
+        AddDiagnosis(
+            kDiskPatternMismatchFailVerdict, DiagnosisType::kFail,
+            absl::StrFormat("Pattern mismatch in block starting at sector %lld "
+                            "in DiskThread::ValidateSectorsOnDisk on disk %s.",
+                            address, device_name_));
       }
     }
 
@@ -3102,8 +3086,8 @@ bool DiskThread::ValidateBlockOnDisk(int fd, BlockData *block) {
 bool DiskThread::Work() {
   int fd;
 
-  logprintf(9, "Log: Starting disk thread %d, disk %s\n", thread_num_,
-            device_name_.c_str());
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat("Starting disk thread on disk %s", device_name_));
 
   srandom(time(NULL));
 
@@ -3123,10 +3107,10 @@ bool DiskThread::Work() {
 #endif
   if (memalign_result) {
     CloseDevice(fd);
-    logprintf(0,
-              "Process Error: Unable to allocate memory for buffers "
-              "for disk %s (thread %d) posix memalign returned %d.\n",
-              device_name_.c_str(), thread_num_, memalign_result);
+    AddProcessError(
+        absl::StrFormat("Unable to allocate memory for buffers for disk %s "
+                        "posix memalign returned error code %d.",
+                        device_name_, memalign_result));
     status_ = false;
     return false;
   }
@@ -3134,10 +3118,10 @@ bool DiskThread::Work() {
 #ifdef HAVE_LIBAIO_H
   if (io_setup(5, &aio_ctx_)) {
     CloseDevice(fd);
-    logprintf(0,
-              "Process Error: Unable to create aio context for disk %s"
-              " (thread %d).\n",
-              device_name_.c_str(), thread_num_);
+    AddProcessError(
+        absl::StrFormat("Unable to allocate memory for buffers for disk %s "
+                        "posix memalign returned error code %d.",
+                        device_name_, memalign_result));
     status_ = false;
     return false;
   }
@@ -3152,10 +3136,10 @@ bool DiskThread::Work() {
 #endif
   CloseDevice(fd);
 
-  logprintf(9,
-            "Log: Completed %d (disk %s): disk thread status %d, "
-            "%d pages copied\n",
-            thread_num_, device_name_.c_str(), status_, pages_copied_);
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat(
+             "Completed thread for disk %s: status %d, %d pages copied",
+             device_name_, status_, pages_copied_));
   return result;
 }
 
@@ -3168,13 +3152,13 @@ RandomDiskThread::~RandomDiskThread() {}
 
 // Workload for random disk thread.
 bool RandomDiskThread::DoWork(int fd) {
-  logprintf(11, "Log: Random phase for disk %s (thread %d).\n",
-            device_name_.c_str(), thread_num_);
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat("Random phase for disk %s", device_name_));
   while (IsReadyToRun()) {
     BlockData *block = block_table_->GetRandomBlock();
     if (block == NULL) {
-      logprintf(12, "Log: No block available for device %s (thread %d).\n",
-                device_name_.c_str(), thread_num_);
+      AddLog(LogSeverity::kDebug,
+             absl::StrFormat("No block available for device %s", device_name_));
     } else {
       ValidateBlockOnDisk(fd, block);
       block_table_->ReleaseBlock(block);

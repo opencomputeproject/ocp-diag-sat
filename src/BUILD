@@ -37,6 +37,7 @@ cc_library(
     ],
     deps = [
         "@com_google_absl//absl/strings:str_format",
+        "@ocp_diag_core//ocpdiag/core/results:measurement_series",
         "@ocp_diag_core//ocpdiag/core/results:test_run",
         "@ocp_diag_core//ocpdiag/core/results:test_step",
         "@ocp_diag_core//ocpdiag/core/results/data_model:dut_info",
