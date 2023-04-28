@@ -1319,7 +1319,6 @@ void Sat::InitializeThreads() {
   if (net_threads_ > 0) thread_test_steps_.push_back(std::move(net_io_step));
 
   // Result check threads.
-  // TODO(b/274523022) Populate memory check step
   std::unique_ptr<TestStep> check_step;
   if (check_threads_ > 0) {
     check_step = std::make_unique<TestStep>("Run Mid-Test Memory Check Threads",
@@ -1615,44 +1614,68 @@ void Sat::JoinThreads() {
 
   QueueStats();
 
-  // TODO(b/274523022) Populate memory check tests
-  auto check_step = std::make_unique<TestStep>(
-      "Run Post-Test Memory Check Threads", *test_run_);
+  {
+    TestStep check_step("Run Post-Test Memory Check Threads", *test_run_);
 
-  // Finish up result checking.
-  // Spawn 4 check threads to minimize check time.
-  logprintf(12, "Log: Finished countdown, begin to result check\n");
-  WorkerStatus reap_check_status;
-  WorkerVector reap_check_vector;
+    // Finish up result checking.
+    // Spawn check threads to minimize check time.
+    check_step.AddLog(
+        Log{.severity = LogSeverity::kDebug,
+            .message = "Finished countdown, beginning to check results"});
+    WorkerStatus reap_check_status;
+    WorkerVector reap_check_vector;
 
-  // No need for check threads for monitor mode.
-  if (!monitor_mode_) {
-    // Initialize the check threads.
-    for (int i = 0; i < fill_threads_; i++) {
-      CheckThread *thread = new CheckThread();
-      thread->InitThread(total_threads_++, this, os_, patternlist_,
-                         &reap_check_status, check_step.get());
-      logprintf(12, "Log: Finished countdown, begin to result check\n");
-      reap_check_vector.push_back(thread);
+    // No need for check threads for monitor mode.
+    if (!monitor_mode_) {
+      // Initialize the check threads.
+      for (int i = 0; i < fill_threads_; i++) {
+        CheckThread *thread = new CheckThread();
+        thread->InitThread(total_threads_++, this, os_, patternlist_,
+                           &reap_check_status, &check_step);
+        reap_check_vector.push_back(thread);
+      }
     }
-  }
 
-  reap_check_status.Initialize();
-  // Check threads should be marked to stop ASAP.
-  reap_check_status.StopWorkers();
+    reap_check_status.Initialize();
+    // Check threads should be marked to stop ASAP.
+    reap_check_status.StopWorkers();
 
-  // Spawn the check threads.
-  for (WorkerVector::const_iterator it = reap_check_vector.begin();
-       it != reap_check_vector.end(); ++it) {
-    logprintf(12, "Log: Spawning thread %d\n", (*it)->ThreadID());
-    (*it)->SpawnThread();
-  }
+    // Spawn the check threads.
+    for (WorkerVector::const_iterator it = reap_check_vector.begin();
+         it != reap_check_vector.end(); ++it) {
+      check_step.AddLog(Log{
+          .severity = LogSeverity::kDebug,
+          .message =
+              absl::StrFormat("Spawning check thread %d", (*it)->ThreadID())});
+      (*it)->SpawnThread();
+    }
 
-  // Join the check threads.
-  for (WorkerVector::const_iterator it = reap_check_vector.begin();
-       it != reap_check_vector.end(); ++it) {
-    logprintf(12, "Log: Joining thread %d\n", (*it)->ThreadID());
-    (*it)->JoinThread();
+    // Join the check threads.
+    for (WorkerVector::const_iterator it = reap_check_vector.begin();
+         it != reap_check_vector.end(); ++it) {
+      check_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                            .message = absl::StrFormat(
+                                "Joining check thread %d", (*it)->ThreadID())});
+      (*it)->JoinThread();
+    }
+
+    // Add in any errors from check threads.
+    for (WorkerVector::const_iterator it = reap_check_vector.begin();
+         it != reap_check_vector.end(); ++it) {
+      check_step.AddLog(Log{
+          .severity = LogSeverity::kDebug,
+          .message = absl::StrFormat("Reaping thread %d", (*it)->ThreadID())});
+      errorcount_ += (*it)->GetErrorCount();
+      int priority = 12;
+      if ((*it)->GetErrorCount()) priority = 5;
+      check_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                            .message = absl::StrFormat(
+                                "Thread %d found %lld hardware incidents",
+                                (*it)->ThreadID(), (*it)->GetErrorCount())});
+      delete (*it);
+    }
+    reap_check_vector.clear();
+    reap_check_status.Destroy();
   }
 
   // Reap all children. Stopped threads should have already ended.
@@ -1684,28 +1707,6 @@ void Sat::JoinThreads() {
     }
   }
   ReleaseWorkerLock();
-
-  // Add in any errors from check threads.
-  for (WorkerVector::const_iterator it = reap_check_vector.begin();
-       it != reap_check_vector.end(); ++it) {
-    logprintf(12, "Log: Reaping thread status %d\n", (*it)->ThreadID());
-    if ((*it)->GetStatus() != 1) {
-      logprintf(0,
-                "Process Error: Thread %d failed with status %d at "
-                "%.2f seconds\n",
-                (*it)->ThreadID(), (*it)->GetStatus(),
-                (*it)->GetRunDurationUSec() * 1.0 / 1000000);
-      bad_status();
-    }
-    errorcount_ += (*it)->GetErrorCount();
-    int priority = 12;
-    if ((*it)->GetErrorCount()) priority = 5;
-    logprintf(priority, "Log: Thread %d found %lld hardware incidents\n",
-              (*it)->ThreadID(), (*it)->GetErrorCount());
-    delete (*it);
-  }
-  reap_check_vector.clear();
-  reap_check_status.Destroy();
 }
 
 // Print queuing information.

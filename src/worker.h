@@ -593,6 +593,8 @@ class CheckThread : public WorkerThread {
   // Calculate worker thread specific bandwidth.
   virtual float GetMemoryCopiedData() { return GetCopiedData(); }
 
+  string GetThreadTypeName() { return "Memory Page Check Thread"; }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(CheckThread);
 };
