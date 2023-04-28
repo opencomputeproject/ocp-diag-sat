@@ -476,6 +476,8 @@ class NetworkThread : public WorkerThread {
   // Calculate worker thread specific bandwidth.
   virtual float GetDeviceCopiedData() { return GetCopiedData() * 2; }
 
+  string GetThreadTypeName() { return "Network IO Thread"; }
+
  protected:
   // IsReadyToRunNoPause() wrapper, for NetworkSlaveThread to override.
   virtual bool IsNetworkStopSet();
@@ -499,6 +501,8 @@ class NetworkSlaveThread : public NetworkThread {
   virtual void SetSock(int sock);
   virtual bool Work();
 
+  string GetThreadTypeName() { return "Child Network Thread"; }
+
  protected:
   virtual bool IsNetworkStopSet();
 
@@ -511,6 +515,8 @@ class NetworkListenThread : public NetworkThread {
  public:
   NetworkListenThread();
   virtual bool Work();
+
+  string GetThreadTypeName() { return "Network Listen Thread"; }
 
  private:
   virtual bool Listen();
