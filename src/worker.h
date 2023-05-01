@@ -607,6 +607,8 @@ class CpuStressThread : public WorkerThread {
   CpuStressThread() {}
   virtual bool Work();
 
+  string GetThreadTypeName() { return "CPU Stress Thread"; }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(CpuStressThread);
 };

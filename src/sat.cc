@@ -1411,14 +1411,16 @@ void Sat::InitializeThreads() {
   if (disk_threads_ > 0) thread_test_steps_.push_back(std::move(disk_step));
 
   // CPU stress threads.
-  // TODO(b/274522790) Populate cpu stress step
   std::unique_ptr<TestStep> cpu_stress_step;
   if (cpu_stress_threads_ > 0) {
     cpu_stress_step =
         std::make_unique<TestStep>("Run CPU Stress Threads", *test_run_);
+    cpu_stress_step->AddLog(Log{
+        .severity = LogSeverity::kDebug,
+        .message = "Starting cpu stress threads",
+    });
   }
   WorkerVector *cpu_vector = new WorkerVector();
-  logprintf(12, "Log: Starting cpu stress threads\n");
   for (int i = 0; i < cpu_stress_threads_; i++) {
     CpuStressThread *thread = new CpuStressThread();
     thread->InitThread(total_threads_++, this, os_, patternlist_,
@@ -1439,9 +1441,11 @@ void Sat::InitializeThreads() {
       cpu_set_t all_cores;
       cpuset_set_ab(&all_cores, 0, cores);
       if (!cpuset_isequal(&available_cpus, &all_cores)) {
-        logprintf(0, "Log: cores = %s, expected %s\n",
-                  cpuset_format(&available_cpus).c_str(),
-                  cpuset_format(&all_cores).c_str());
+        cpu_stress_step->AddLog(Log{
+            .severity = LogSeverity::kWarning,
+            .message = absl::StrFormat("Found %s cores when %s were expected",
+                                       cpuset_format(&available_cpus),
+                                       cpuset_format(&all_cores))});
       }
 
       // Set thread affinity.

@@ -942,6 +942,6 @@ bool OsLayer::CpuStressWorkload() {
   }
 
   // Artificial printf so the loops do not get optimized away.
-  if (sum == 0.0) logprintf(12, "Log: I'm Feeling Lucky!\n");
+  if (sum == 0.0) fprintf(stdout, "I'm feeling lucky!");
   return true;
 }

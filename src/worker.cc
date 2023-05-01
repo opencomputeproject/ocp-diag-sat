@@ -2354,7 +2354,7 @@ bool NetworkSlaveThread::Work() {
 // Worker thread to heat up CPU.
 // This thread does not evaluate pass/fail or software error.
 bool CpuStressThread::Work() {
-  logprintf(9, "Log: Starting CPU stress thread %d\n", thread_num_);
+  AddLog(LogSeverity::kDebug, "Starting CPU stress thead");
 
   do {
     // Run ludloff's platform/CPU-specific assembly workload.
@@ -2362,7 +2362,7 @@ bool CpuStressThread::Work() {
     YieldSelf();
   } while (IsReadyToRun());
 
-  logprintf(9, "Log: Finished CPU stress thread %d:\n", thread_num_);
+  AddLog(LogSeverity::kDebug, "Finished CPU stress thread");
   status_ = true;
   return true;
 }
