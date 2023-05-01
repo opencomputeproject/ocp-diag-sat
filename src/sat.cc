@@ -1460,11 +1460,13 @@ void Sat::InitializeThreads() {
 
   // CPU Cache Coherency Threads - one for each core available.
   if (cc_test_) {
-    // TODO(b/274522913) Populate CPU cache coherency step
     auto cpu_cache_step =
         std::make_unique<TestStep>("Run CPU Cache Coherency Test", *test_run_);
     WorkerVector *cc_vector = new WorkerVector();
-    logprintf(12, "Log: Starting cpu cache coherency threads\n");
+    cpu_cache_step->AddLog(Log{
+        .severity = LogSeverity::kDebug,
+        .message = "Starting cpu cache coherency threads",
+    });
 
     // Allocate the shared datastructure to be worked on by the threads.
     cc_cacheline_data_ = reinterpret_cast<cc_cacheline_data *>(
@@ -1483,8 +1485,12 @@ void Sat::InitializeThreads() {
     if (line_size <= 0) {
       line_size = CacheLineSize();
       if (line_size < kCacheLineSize) line_size = kCacheLineSize;
-      logprintf(12, "Log: Using %d as cache line size\n", line_size);
     }
+    cpu_cache_step->AddMeasurement(Measurement{
+        .name = "Cache Line Size",
+        .unit = "bytes",
+        .value = static_cast<double>(line_size),
+    });
     // The number of cache lines needed to hold an array of num_cpus.
     // "num" must be the same type as cc_cacheline_data[X].num or the memory
     // size calculations will fail.

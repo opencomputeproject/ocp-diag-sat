@@ -61,6 +61,7 @@ using ::ocpdiag::results::DiagnosisType;
 using ::ocpdiag::results::Error;
 using ::ocpdiag::results::Log;
 using ::ocpdiag::results::LogSeverity;
+using ::ocpdiag::results::Measurement;
 using ::ocpdiag::results::MeasurementSeries;
 using ::ocpdiag::results::MeasurementSeriesElement;
 using ::ocpdiag::results::MeasurementSeriesStart;
@@ -377,7 +378,6 @@ void WorkerThread::StartRoutine() {
 // Thread work loop. Execute until marked finished.
 bool WorkerThread::Work() {
   do {
-    logprintf(9, "Log: ...\n");
     // Sleep for 1 second.
     sat_sleep(1);
   } while (IsReadyToRun());
@@ -423,14 +423,14 @@ bool WorkerThread::BindToCpus(const cpu_set_t *thread_mask) {
   cpu_set_t process_mask;
   AvailableCpus(&process_mask);
   if (cpuset_isequal(thread_mask, &process_mask)) return true;
-
-  logprintf(11, "Log: available CPU mask - %s\n",
-            cpuset_format(&process_mask).c_str());
+  AddLog(LogSeverity::kDebug, absl::StrFormat("Available CPU mask - %s",
+                                              cpuset_format(&process_mask)));
   if (!cpuset_issubset(thread_mask, &process_mask)) {
     // Invalid cpu_mask, ie cpu not allocated to this process or doesn't exist.
-    logprintf(0, "Log: requested CPUs %s not a subset of available %s\n",
-              cpuset_format(thread_mask).c_str(),
-              cpuset_format(&process_mask).c_str());
+    AddLog(LogSeverity::kWarning,
+           absl::StrFormat("Requested CPUs %s not a subset of available %s",
+                           cpuset_format(thread_mask),
+                           cpuset_format(&process_mask)));
     return false;
   }
 #ifdef HAVE_SCHED_GETAFFINITY
@@ -438,7 +438,7 @@ bool WorkerThread::BindToCpus(const cpu_set_t *thread_mask) {
     return (sched_setaffinity(gettid(), sizeof(*thread_mask), thread_mask) ==
             0);
   } else {
-    logprintf(11, "Log: Skipping CPU affinity set.\n");
+    AddLog(LogSeverity::kDebug, "Skipping CPU affinity set.");
   }
 #endif
   return true;
@@ -2389,7 +2389,7 @@ uint64 CpuCacheCoherencyThread::SimpleRandom(uint64 seed) {
 // Worked thread to test the cache coherency of the CPUs
 // Return false on fatal sw error.
 bool CpuCacheCoherencyThread::Work() {
-  logprintf(9, "Log: Starting the Cache Coherency thread %d\n", cc_thread_num_);
+  AddLog(LogSeverity::kDebug, "Starting the Cache Coherency thread");
   int64 time_start, time_end;
 
   // Use a slightly more robust random number for the initial
@@ -2454,8 +2454,11 @@ bool CpuCacheCoherencyThread::Work() {
     // case would be off by more than a small number.
     if ((cc_global_num & 0xff) != (cc_inc_count_ & 0xff)) {
       errorcount_++;
-      logprintf(0, "Hardware Error: global(%d) and local(%d) do not match\n",
-                cc_global_num, cc_inc_count_);
+      AddDiagnosis(
+          kCacheCoherencyFailVerdict, DiagnosisType::kFail,
+          absl::StrFormat(
+              "Global (%d) and local (%d) cacheline counters do not match.",
+              cc_global_num, cc_inc_count_));
     }
   }
   time_end = sat_get_time_us();
@@ -2464,12 +2467,25 @@ bool CpuCacheCoherencyThread::Work() {
   // inc_rate is the no. of increments per second.
   double inc_rate = total_inc * 1e6 / us_elapsed;
 
-  logprintf(4,
-            "Stats: CC Thread(%d): Time=%llu us,"
-            " Increments=%llu, Increments/sec = %.6lf\n",
-            cc_thread_num_, us_elapsed, total_inc, inc_rate);
-  logprintf(9, "Log: Finished CPU Cache Coherency thread %d:\n",
-            cc_thread_num_);
+  test_step_->AddMeasurement(Measurement{
+      .name =
+          absl::StrFormat("Cache Coherency Thread %d Runtime", cc_thread_num_),
+      .unit = "us",
+      .value = static_cast<double>(us_elapsed),
+  });
+  test_step_->AddMeasurement(Measurement{
+      .name = absl::StrFormat("Cache Coherency Thread %d Total Increments",
+                              cc_thread_num_),
+      .unit = "increments",
+      .value = static_cast<double>(total_inc),
+  });
+  test_step_->AddMeasurement(Measurement{
+      .name = absl::StrFormat("Cache Coherency Thread %d Increment Rate",
+                              cc_thread_num_),
+      .unit = "increment / second",
+      .value = inc_rate,
+  });
+  AddLog(LogSeverity::kDebug, "Finished CPU Cache Coherency thread");
   status_ = true;
   return true;
 }
