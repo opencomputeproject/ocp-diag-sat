@@ -1515,15 +1515,13 @@ bool InvertThread::Work() {
   bool result = true;
   int64 loops = 0;
 
-  logprintf(9, "Log: Starting invert thread %d\n", thread_num_);
+  AddLog(LogSeverity::kDebug, "Starting memory invert thread");
 
   while (IsReadyToRun()) {
     // Pop the needed pages.
     result = result && sat_->GetValid(&src, *test_step_);
     if (!result) {
-      logprintf(0,
-                "Process Error: invert_thread failed to pop pages, "
-                "bailing\n");
+      AddProcessError("Failed to pop pages");
       break;
     }
 
@@ -1546,9 +1544,7 @@ bool InvertThread::Work() {
 
     result = result && sat_->PutValid(&src, *test_step_);
     if (!result) {
-      logprintf(0,
-                "Process Error: invert_thread failed to push pages, "
-                "bailing\n");
+      AddProcessError("Failed to push pages");
       break;
     }
     loops++;
@@ -1556,8 +1552,10 @@ bool InvertThread::Work() {
 
   pages_copied_ = loops * 2;
   status_ = result;
-  logprintf(9, "Log: Completed %d: Copy thread. Status %d, %d pages copied\n",
-            thread_num_, status_, pages_copied_);
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat(
+             "Invert thread completed with status %d and %d pages copied",
+             status_, pages_copied_));
   return result;
 }
 
