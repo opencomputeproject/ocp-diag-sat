@@ -1532,13 +1532,14 @@ void Sat::InitializeThreads() {
     thread_test_steps_.push_back(std::move(cpu_cache_step));
   }
 
-  // TODO(b/274523120) Populate CPU frequency test step
   if (cpu_freq_test_) {
     auto cpu_freq_step =
         std::make_unique<TestStep>("Run CPU Frequency Test", *test_run_);
     // Create the frequency test thread.
-    logprintf(5, "Log: Running cpu frequency test: threshold set to %dMHz.\n",
-              cpu_freq_threshold_);
+    cpu_freq_step->AddLog(Log{
+        .severity = LogSeverity::kDebug,
+        .message = "Running CPU frequency test.",
+    });
     CpuFreqThread *thread =
         new CpuFreqThread(CpuCount(), cpu_freq_threshold_, cpu_freq_round_);
     // This thread should be paused when other threads are paused.
