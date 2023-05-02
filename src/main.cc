@@ -26,7 +26,6 @@ int main(int argc, const char **argv) {
     logprintf(0, "Process Error: Sat::Run() failed\n");
     sat->bad_status();
   }
-  sat->PrintResults();
   if (!sat->Cleanup()) {
     logprintf(0, "Process Error: Sat::Cleanup() failed\n");
     sat->bad_status();

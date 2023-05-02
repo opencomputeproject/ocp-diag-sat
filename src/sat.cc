@@ -1201,13 +1201,14 @@ void Sat::PrintHelp() {
 }
 
 // Launch the SAT task threads. Returns 0 on error.
-void Sat::InitializeThreads() {
+void Sat::InitializeThreads(TestStep &test_step) {
   // Skip creating threads if in monitor mode.
   if (monitor_mode_) return;
 
   AcquireWorkerLock();
 
-  logprintf(12, "Log: Starting worker threads\n");
+  test_step.AddLog(
+      Log{.severity = LogSeverity::kDebug, "Starting worker threads"});
 
   WorkerVector *memory_vector = new WorkerVector();
   std::unique_ptr<TestStep> copy_step;
@@ -1609,8 +1610,9 @@ int Sat::CacheLineSize() {
 }
 
 // Notify and reap worker threads.
-void Sat::JoinThreads() {
-  logprintf(12, "Log: Joining worker threads\n");
+void Sat::JoinThreads(TestStep &test_step) {
+  test_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                       .message = "Joining worker threads"});
   power_spike_status_.StopWorkers();
   continuous_status_.StopWorkers();
 
@@ -1619,7 +1621,9 @@ void Sat::JoinThreads() {
        map_it != workers_map_.end(); ++map_it) {
     for (WorkerVector::const_iterator it = map_it->second->begin();
          it != map_it->second->end(); ++it) {
-      logprintf(12, "Log: Joining thread %d\n", (*it)->ThreadID());
+      test_step.AddLog(Log{
+          .severity = LogSeverity::kDebug,
+          .message = absl::StrFormat("Joining thread %d", (*it)->ThreadID())});
       (*it)->JoinThread();
     }
   }
@@ -1692,7 +1696,8 @@ void Sat::JoinThreads() {
   // Reap all children. Stopped threads should have already ended.
   // Result checking threads will end when they have finished
   // result checking.
-  logprintf(12, "Log: Join all outstanding threads\n");
+  test_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                       .message = "Join all outstanding threads"});
 
   // Find all errors.
   errorcount_ = GetTotalErrorCount();
@@ -1702,19 +1707,13 @@ void Sat::JoinThreads() {
        map_it != workers_map_.end(); ++map_it) {
     for (WorkerVector::const_iterator it = map_it->second->begin();
          it != map_it->second->end(); ++it) {
-      logprintf(12, "Log: Reaping thread status %d\n", (*it)->ThreadID());
-      if ((*it)->GetStatus() != 1) {
-        logprintf(0,
-                  "Process Error: Thread %d failed with status %d at "
-                  "%.2f seconds\n",
-                  (*it)->ThreadID(), (*it)->GetStatus(),
-                  (*it)->GetRunDurationUSec() * 1.0 / 1000000);
-        bad_status();
-      }
-      int priority = 12;
-      if ((*it)->GetErrorCount()) priority = 5;
-      logprintf(priority, "Log: Thread %d found %lld hardware incidents\n",
-                (*it)->ThreadID(), (*it)->GetErrorCount());
+      test_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                           .message = absl::StrFormat(
+                               "Reaping thread status %d", (*it)->ThreadID())});
+      test_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                           .message = absl::StrFormat(
+                               "Thread %d found %lld hardware incidents",
+                               (*it)->ThreadID(), (*it)->GetErrorCount())});
     }
   }
   ReleaseWorkerLock();
@@ -1840,35 +1839,44 @@ int64 Sat::GetTotalErrorCount() {
   return errors;
 }
 
-void Sat::SpawnThreads() {
-  logprintf(12, "Log: Initializing WorkerStatus objects\n");
+void Sat::SpawnThreads(TestStep &test_step) {
+  test_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                       .message = "Initializing WorkerStatus objects"});
   power_spike_status_.Initialize();
   continuous_status_.Initialize();
-  logprintf(12, "Log: Spawning worker threads\n");
+  test_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                       .message = "Spawning worker threads"});
   for (WorkerMap::const_iterator map_it = workers_map_.begin();
        map_it != workers_map_.end(); ++map_it) {
     for (WorkerVector::const_iterator it = map_it->second->begin();
          it != map_it->second->end(); ++it) {
-      logprintf(12, "Log: Spawning thread %d\n", (*it)->ThreadID());
+      test_step.AddLog(Log{
+          .severity = LogSeverity::kDebug,
+          .message =
+              absl::StrFormat("Spawning worker thread %d", (*it)->ThreadID())});
       (*it)->SpawnThread();
     }
   }
 }
 
 // Delete used worker thread objects.
-void Sat::DeleteThreads() {
-  logprintf(12, "Log: Deleting worker threads\n");
+void Sat::DeleteThreads(TestStep &test_step) {
+  test_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                       .message = "Deleting worker threads"});
   for (WorkerMap::const_iterator map_it = workers_map_.begin();
        map_it != workers_map_.end(); ++map_it) {
     for (WorkerVector::const_iterator it = map_it->second->begin();
          it != map_it->second->end(); ++it) {
-      logprintf(12, "Log: Deleting thread %d\n", (*it)->ThreadID());
+      test_step.AddLog(Log{
+          .severity = LogSeverity::kDebug,
+          .message = absl::StrFormat("Deleting thread %d", (*it)->ThreadID())});
       delete (*it);
     }
     delete map_it->second;
   }
   workers_map_.clear();
-  logprintf(12, "Log: Destroying WorkerStatus objects\n");
+  test_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                       .message = "Destroying WorkerStatus objects"});
   power_spike_status_.Destroy();
   continuous_status_.Destroy();
 }
@@ -1914,7 +1922,9 @@ bool Sat::Run() {
   // must be called in the same thread that reads the "volatile sig_atomic_t"
   // variable it sets.  We enforce that by blocking the signals in question
   // in the worker threads, forcing them to be handled by this thread.
-  logprintf(12, "Log: Installing signal handlers\n");
+  TestStep run_step("Run Test Threads", *test_run_);
+  run_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                      .message = "Installing signal handlers"});
   sigset_t new_blocked_signals;
   sigemptyset(&new_blocked_signals);
   sigaddset(&new_blocked_signals, SIGINT);
@@ -1925,12 +1935,16 @@ bool Sat::Run() {
   sighandler_t prev_sigterm_handler = signal(SIGTERM, SatHandleBreak);
 
   // Kick off all the worker threads.
-  logprintf(12, "Log: Launching worker threads\n");
-  InitializeThreads();
-  SpawnThreads();
+  run_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                      .message = "Launching worker threads"});
+  InitializeThreads(run_step);
+  SpawnThreads(run_step);
   pthread_sigmask(SIG_SETMASK, &prev_blocked_signals, NULL);
 
-  logprintf(12, "Log: Starting countdown with %d seconds\n", runtime_seconds_);
+  run_step.AddLog(
+      Log{.severity = LogSeverity::kDebug,
+          .message = absl::StrFormat("Starting countdown with %d seconds",
+                                     runtime_seconds_)});
 
   // In seconds.
   static const time_t kSleepFrequency = 5;
@@ -1959,8 +1973,11 @@ bool Sat::Run() {
 
     if (user_break_) {
       // Handle early exit.
-      logprintf(0, "Log: User exiting early (%d seconds remaining)\n",
-                seconds_remaining);
+      run_step.AddLog(
+          Log{.severity = LogSeverity::kDebug,
+              .message = absl::StrFormat(
+                  "User exiting early with %d seconds remaining in test",
+                  seconds_remaining)});
       break;
     }
 
@@ -1968,52 +1985,62 @@ bool Sat::Run() {
     if (max_errorcount_ != 0) {
       uint64 errors = GetTotalErrorCount();
       if (errors > max_errorcount_) {
-        logprintf(0,
-                  "Log: Exiting early (%d seconds remaining) "
-                  "due to excessive failures (%lld)\n",
-                  seconds_remaining, errors);
+        run_step.AddLog(Log{.severity = LogSeverity::kError,
+                            .message = absl::StrFormat(
+                                "Exiting early with %d seconds remaining in "
+                                "test due to excession (%lld) errors",
+                                seconds_remaining, errors)});
         break;
       }
     }
 
     if (now >= next_print) {
       // Print a count down message.
-      logprintf(5, "Log: Seconds remaining: %d\n", seconds_remaining);
+      run_step.AddLog(
+          Log{.severity = LogSeverity::kInfo,
+              .message = absl::StrFormat("%d seconds remaining in test",
+                                         seconds_remaining)});
       next_print = NextOccurance(print_delay_, start, now);
     }
 
     if (next_injection && now >= next_injection) {
       // Inject an error.
-      // TODO(b/279508366) Add this to the main loop test step
-      // logprintf(4, "Log: Injecting error (%d seconds remaining)\n",
-      //           seconds_remaining);
-      // struct page_entry src;
-      // GetValid(&src);
-      // src.pattern = patternlist_->GetPattern(0);
-      // PutValid(&src);
-      // next_injection = NextOccurance(kInjectionFrequency, start, now);
+      run_step.AddLog(
+          Log{.severity = LogSeverity::kDebug,
+              .message = absl::StrFormat(
+                  "Injecting error with %d seconds remaining in test",
+                  seconds_remaining)});
+      struct page_entry src;
+      GetValid(&src, run_step);
+      src.pattern = patternlist_->GetPattern(0);
+      PutValid(&src, run_step);
+      next_injection = NextOccurance(kInjectionFrequency, start, now);
     }
 
     if (next_pause && now >= next_pause) {
       // Tell worker threads to pause in preparation for a power spike.
-      logprintf(4,
-                "Log: Pausing worker threads in preparation for power spike "
-                "(%d seconds remaining)\n",
-                seconds_remaining);
+      run_step.AddLog(Log{.severity = LogSeverity::kInfo,
+                          .message = absl::StrFormat(
+                              "Pausing worker threads in preparation for power "
+                              "spike with %d seconds remaining in test",
+                              seconds_remaining)});
       power_spike_status_.PauseWorkers();
-      logprintf(12, "Log: Worker threads paused\n");
+      run_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                          .message = "Worker threads paused"});
       next_pause = 0;
       next_resume = now + pause_duration_;
     }
 
     if (next_resume && now >= next_resume) {
       // Tell worker threads to resume in order to cause a power spike.
-      logprintf(4,
-                "Log: Resuming worker threads to cause a power spike (%d "
-                "seconds remaining)\n",
-                seconds_remaining);
+      run_step.AddLog(Log{
+          .severity = LogSeverity::kInfo,
+          .message = absl::StrFormat("Resuming worker threads to cause a power "
+                                     "spike with %d seconds remaining in test",
+                                     seconds_remaining)});
       power_spike_status_.ResumeWorkers();
-      logprintf(12, "Log: Worker threads resumed\n");
+      run_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                          .message = "Worker threads resumed"});
       next_pause = NextOccurance(pause_delay_, start, now);
       next_resume = 0;
     }
@@ -2022,13 +2049,14 @@ bool Sat::Run() {
     now = time(NULL);
   }
 
-  JoinThreads();
+  JoinThreads(run_step);
 
   if (!monitor_mode_) RunAnalysis();
 
-  DeleteThreads();
+  DeleteThreads(run_step);
 
-  logprintf(12, "Log: Uninstalling signal handlers\n");
+  run_step.AddLog(Log{.severity = LogSeverity::kDebug,
+                      .message = "Uninstalling signal handlers"});
   signal(SIGINT, prev_sigint_handler);
   signal(SIGTERM, prev_sigterm_handler);
 
@@ -2091,25 +2119,6 @@ bool Sat::Cleanup() {
   sat_assert(0 == pthread_mutex_destroy(&worker_lock_));
 
   return true;
-}
-
-// Pretty print really obvious results.
-bool Sat::PrintResults() {
-  bool result = true;
-
-  logprintf(4, "\n");
-  if (statuscount_) {
-    logprintf(4, "Status: FAIL - test encountered procedural errors\n");
-    result = false;
-  } else if (errorcount_) {
-    logprintf(4, "Status: FAIL - test discovered HW problems\n");
-    result = false;
-  } else {
-    logprintf(4, "Status: PASS - please verify no corrected errors\n");
-  }
-  logprintf(4, "\n");
-
-  return result;
 }
 
 // Helper functions.
