@@ -51,6 +51,8 @@ using ::ocpdiag::results::Log;
 using ::ocpdiag::results::LogSeverity;
 using ::ocpdiag::results::Measurement;
 using ::ocpdiag::results::TestStep;
+using ::ocpdiag::results::Validator;
+using ::ocpdiag::results::ValidatorType;
 
 // stressapptest versioning here.
 static const char *kVersion = "1.0.0";
@@ -1677,8 +1679,6 @@ void Sat::JoinThreads() {
           .severity = LogSeverity::kDebug,
           .message = absl::StrFormat("Reaping thread %d", (*it)->ThreadID())});
       errorcount_ += (*it)->GetErrorCount();
-      int priority = 12;
-      if ((*it)->GetErrorCount()) priority = 5;
       check_step.AddLog(Log{.severity = LogSeverity::kDebug,
                             .message = absl::StrFormat(
                                 "Thread %d found %lld hardware incidents",
@@ -1718,16 +1718,20 @@ void Sat::JoinThreads() {
     }
   }
   ReleaseWorkerLock();
+
+  // Delete thread test steps
+  for (std::unique_ptr<TestStep> &thread_step : thread_test_steps_)
+    thread_step.reset();
 }
 
 // Print queuing information.
 void Sat::QueueStats() { finelock_q_->QueueAnalysis(); }
 
-void Sat::AnalysisAllStats() {
-  float max_runtime_sec = 0.;
-  float total_data = 0.;
-  float total_bandwidth = 0.;
-  float thread_runtime_sec = 0.;
+void Sat::AnalysisAllStats(TestStep &test_step) {
+  double max_runtime_sec = 0.;
+  double total_data = 0.;
+  double total_bandwidth = 0.;
+  double thread_runtime_sec = 0.;
 
   for (WorkerMap::const_iterator map_it = workers_map_.begin();
        map_it != workers_map_.end(); ++map_it) {
@@ -1744,141 +1748,80 @@ void Sat::AnalysisAllStats() {
 
   total_bandwidth = total_data / max_runtime_sec;
 
-  logprintf(0,
-            "Stats: Completed: %.2fM in %.2fs %.2fMB/s, "
-            "with %d hardware incidents, %d errors\n",
-            total_data, max_runtime_sec, total_bandwidth, errorcount_,
-            statuscount_);
+  test_step.AddMeasurement(Measurement{
+      .name = "Total Data Copied",
+      .unit = "MB",
+      .value = total_data,
+  });
+  test_step.AddMeasurement(Measurement{
+      .name = "Run Time",
+      .unit = "s",
+      .value = max_runtime_sec,
+  });
+  test_step.AddMeasurement(Measurement{
+      .name = "Total Bandwidth",
+      .unit = "MB/s",
+      .value = total_bandwidth,
+  });
+  test_step.AddMeasurement(Measurement{
+      .name = "Total Hardware Incidents",
+      .validators = {Validator{.type = ValidatorType::kEqual, .value = {0.}}},
+      .value = static_cast<double>(errorcount_),
+  });
 }
 
-void Sat::MemoryStats() {
-  float memcopy_data = 0.;
-  float memcopy_bandwidth = 0.;
-  WorkerMap::const_iterator mem_it =
-      workers_map_.find(static_cast<int>(kMemoryType));
-  WorkerMap::const_iterator file_it =
-      workers_map_.find(static_cast<int>(kFileIOType));
-  sat_assert(mem_it != workers_map_.end());
-  sat_assert(file_it != workers_map_.end());
-  for (WorkerVector::const_iterator it = mem_it->second->begin();
-       it != mem_it->second->end(); ++it) {
-    memcopy_data += (*it)->GetMemoryCopiedData();
-    memcopy_bandwidth += (*it)->GetMemoryBandwidth();
-  }
-  for (WorkerVector::const_iterator it = file_it->second->begin();
-       it != file_it->second->end(); ++it) {
-    memcopy_data += (*it)->GetMemoryCopiedData();
-    memcopy_bandwidth += (*it)->GetMemoryBandwidth();
-  }
-  GoogleMemoryStats(&memcopy_data, &memcopy_bandwidth);
-  logprintf(4, "Stats: Memory Copy: %.2fM at %.2fMB/s\n", memcopy_data,
-            memcopy_bandwidth);
-}
-
-void Sat::GoogleMemoryStats(float *memcopy_data, float *memcopy_bandwidth) {
-  // Do nothing, should be implemented by subclasses.
-}
-
-void Sat::FileStats() {
-  float file_data = 0.;
-  float file_bandwidth = 0.;
-  WorkerMap::const_iterator file_it =
-      workers_map_.find(static_cast<int>(kFileIOType));
-  sat_assert(file_it != workers_map_.end());
-  for (WorkerVector::const_iterator it = file_it->second->begin();
-       it != file_it->second->end(); ++it) {
-    file_data += (*it)->GetDeviceCopiedData();
-    file_bandwidth += (*it)->GetDeviceBandwidth();
-  }
-  logprintf(4, "Stats: File Copy: %.2fM at %.2fMB/s\n", file_data,
-            file_bandwidth);
-}
-
-void Sat::CheckStats() {
-  float check_data = 0.;
-  float check_bandwidth = 0.;
-  WorkerMap::const_iterator check_it =
-      workers_map_.find(static_cast<int>(kCheckType));
-  sat_assert(check_it != workers_map_.end());
-  for (WorkerVector::const_iterator it = check_it->second->begin();
-       it != check_it->second->end(); ++it) {
-    check_data += (*it)->GetMemoryCopiedData();
-    check_bandwidth += (*it)->GetMemoryBandwidth();
-  }
-  logprintf(4, "Stats: Data Check: %.2fM at %.2fMB/s\n", check_data,
-            check_bandwidth);
-}
-
-void Sat::NetStats() {
-  float net_data = 0.;
-  float net_bandwidth = 0.;
-  WorkerMap::const_iterator netio_it =
-      workers_map_.find(static_cast<int>(kNetIOType));
-  WorkerMap::const_iterator netslave_it =
-      workers_map_.find(static_cast<int>(kNetSlaveType));
-  sat_assert(netio_it != workers_map_.end());
-  sat_assert(netslave_it != workers_map_.end());
-  for (WorkerVector::const_iterator it = netio_it->second->begin();
-       it != netio_it->second->end(); ++it) {
-    net_data += (*it)->GetDeviceCopiedData();
-    net_bandwidth += (*it)->GetDeviceBandwidth();
-  }
-  for (WorkerVector::const_iterator it = netslave_it->second->begin();
-       it != netslave_it->second->end(); ++it) {
-    net_data += (*it)->GetDeviceCopiedData();
-    net_bandwidth += (*it)->GetDeviceBandwidth();
-  }
-  logprintf(4, "Stats: Net Copy: %.2fM at %.2fMB/s\n", net_data, net_bandwidth);
-}
-
-void Sat::InvertStats() {
-  float invert_data = 0.;
-  float invert_bandwidth = 0.;
-  WorkerMap::const_iterator invert_it =
-      workers_map_.find(static_cast<int>(kInvertType));
-  sat_assert(invert_it != workers_map_.end());
-  for (WorkerVector::const_iterator it = invert_it->second->begin();
-       it != invert_it->second->end(); ++it) {
-    invert_data += (*it)->GetMemoryCopiedData();
-    invert_bandwidth += (*it)->GetMemoryBandwidth();
-  }
-  logprintf(4, "Stats: Invert Data: %.2fM at %.2fMB/s\n", invert_data,
-            invert_bandwidth);
-}
-
-void Sat::DiskStats() {
-  float disk_data = 0.;
-  float disk_bandwidth = 0.;
-  WorkerMap::const_iterator disk_it =
-      workers_map_.find(static_cast<int>(kDiskType));
-  WorkerMap::const_iterator random_it =
-      workers_map_.find(static_cast<int>(kRandomDiskType));
-  sat_assert(disk_it != workers_map_.end());
-  sat_assert(random_it != workers_map_.end());
-  for (WorkerVector::const_iterator it = disk_it->second->begin();
-       it != disk_it->second->end(); ++it) {
-    disk_data += (*it)->GetDeviceCopiedData();
-    disk_bandwidth += (*it)->GetDeviceBandwidth();
-  }
-  for (WorkerVector::const_iterator it = random_it->second->begin();
-       it != random_it->second->end(); ++it) {
-    disk_data += (*it)->GetDeviceCopiedData();
-    disk_bandwidth += (*it)->GetDeviceBandwidth();
+void Sat::ReportThreadStats(vector<ThreadType> thread_types,
+                            string measurement_name, bool use_device_data,
+                            TestStep &test_step) {
+  double data = 0;
+  double bandwidth = 0;
+  for (ThreadType thread_type : thread_types) {
+    WorkerMap::const_iterator outer_it =
+        workers_map_.find(static_cast<int>(thread_type));
+    sat_assert(outer_it != workers_map_.end());
+    for (WorkerVector::const_iterator inner_it = outer_it->second->begin();
+         inner_it != outer_it->second->end(); ++inner_it) {
+      if (use_device_data) {
+        data += (*inner_it)->GetDeviceCopiedData();
+        bandwidth += (*inner_it)->GetDeviceBandwidth();
+      } else {
+        data += (*inner_it)->GetMemoryCopiedData();
+        bandwidth += (*inner_it)->GetMemoryBandwidth();
+      }
+    }
   }
 
-  logprintf(4, "Stats: Disk: %.2fM at %.2fMB/s\n", disk_data, disk_bandwidth);
+  test_step.AddMeasurement(Measurement{
+      .name = absl::StrCat(measurement_name, " Data Copied"),
+      .unit = "MB",
+      .value = data,
+  });
+  test_step.AddMeasurement(Measurement{
+      .name = absl::StrCat(measurement_name, " Bandwidth"),
+      .unit = "MB/s",
+      .value = bandwidth,
+  });
 }
 
 // Process worker thread data for bandwidth information, and error results.
 // You can add more methods here just subclassing SAT.
 void Sat::RunAnalysis() {
-  AnalysisAllStats();
-  MemoryStats();
-  FileStats();
-  NetStats();
-  CheckStats();
-  InvertStats();
-  DiskStats();
+  TestStep analysis_step("Run and Report Thread Analysis", *test_run_);
+  AnalysisAllStats(analysis_step);
+  if (memory_threads_ > 0)
+    ReportThreadStats({kMemoryType, kFileIOType}, "Memory", false,
+                      analysis_step);
+  if (file_threads_ > 0)
+    ReportThreadStats({kFileIOType}, "File", true, analysis_step);
+  if (check_threads_ > 0)
+    ReportThreadStats({kCheckType}, "Check", false, analysis_step);
+  if (net_threads_ > 0)
+    ReportThreadStats({kNetIOType, kNetSlaveType}, "Net", true, analysis_step);
+  if (invert_threads_ > 0)
+    ReportThreadStats({kInvertType}, "Invert", false, analysis_step);
+  if (disk_threads_ > 0)
+    ReportThreadStats({kDiskType, kRandomDiskType}, "Disk", true,
+                      analysis_step);
 }
 
 // Get total error count, summing across all threads..
@@ -1928,10 +1871,6 @@ void Sat::DeleteThreads() {
   logprintf(12, "Log: Destroying WorkerStatus objects\n");
   power_spike_status_.Destroy();
   continuous_status_.Destroy();
-
-  // Delete thread test steps
-  for (std::unique_ptr<TestStep> &thread_step : thread_test_steps_)
-    thread_step.reset();
 }
 
 namespace {
@@ -2084,8 +2023,6 @@ bool Sat::Run() {
   }
 
   JoinThreads();
-
-  logprintf(0, "Stats: Found %lld hardware incidents\n", errorcount_);
 
   if (!monitor_mode_) RunAnalysis();
 

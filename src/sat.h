@@ -43,7 +43,8 @@ constexpr char kDiskUnknownFailVerdict[] = "sat-disk-unknown-error-fail";
 constexpr char kDiskLowLevelIOFailVerdict[] = "sat-disk-low-level-io-fail";
 
 constexpr char kCacheCoherencyFailVerdict[] = "sat-cache-coherency-fail";
-constexpr char kCpuFrequencyTooLowFailVerdict[] = "sat-cpu-frequency-too-low-fail";
+constexpr char kCpuFrequencyTooLowFailVerdict[] =
+    "sat-cpu-frequency-too-low-fail";
 
 // SAT stress test class.
 class Sat {
@@ -307,13 +308,11 @@ class Sat {
   class PatternList *patternlist_;  // Access to global data patterns.
 
   // RunAnalysis methods
-  void AnalysisAllStats();  // Summary of all runs.
-  void MemoryStats();
-  void FileStats();
-  void NetStats();
-  void CheckStats();
-  void InvertStats();
-  void DiskStats();
+  void AnalysisAllStats(
+      ocpdiag::results::TestStep &test_step);  // Summary of all runs.
+  void ReportThreadStats(vector<ThreadType> thread_types,
+                         string measurement_name, bool use_device_data,
+                         ocpdiag::results::TestStep &test_step);
 
   void QueueStats();
 
@@ -322,9 +321,6 @@ class Sat {
   void AddrMapUpdate(struct page_entry *pe,
                      ocpdiag::results::TestStep &fill_step);
   void AddrMapPrint(ocpdiag::results::TestStep &fill_step);
-
-  // additional memory data from google-specific tests.
-  virtual void GoogleMemoryStats(float *memcopy_data, float *memcopy_bandwidth);
 
   // Page queues, only one of (valid_+empty_) or (finelock_q_) will be used
   // at a time. A commandline switch controls which queue implementation will
