@@ -9,7 +9,6 @@ cc_library(
     srcs = [
         "adler32memcpy.cc",
         "disk_blocks.cc",
-        "error_diag.cc",
         "finelock_queue.cc",
         "logger.cc",
         "os.cc",
@@ -24,7 +23,6 @@ cc_library(
         "adler32memcpy.h",
         "clock.h",
         "disk_blocks.h",
-        "error_diag.h",
         "finelock_queue.h",
         "logger.h",
         "os.h",
