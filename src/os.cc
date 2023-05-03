@@ -49,8 +49,6 @@ using ::ocpdiag::results::LogSeverity;
 using ::ocpdiag::results::Measurement;
 using ::ocpdiag::results::TestStep;
 
-constexpr char kProcessError[] = "sat-process-error";
-
 // OsLayer initialization.
 OsLayer::OsLayer() {
   testmem_ = 0;
