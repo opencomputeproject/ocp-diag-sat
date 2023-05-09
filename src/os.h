@@ -299,14 +299,9 @@ class OsLayer {
   // Update OsLayer state regarding cpu support for various features.
   virtual void GetFeatures(ocpdiag::results::TestStep &setup_step);
 
-  // Open, read, write pci cfg through /proc/bus/pci. fd is /proc/pci file.
-  virtual int PciOpen(int bus, int device, int function);
-  virtual void PciWrite(int fd, uint32 offset, uint32 value, int width);
-  virtual uint32 PciRead(int fd, uint32 offset, int width);
-
   // Read MSRs
-  virtual bool ReadMSR(uint32 core, uint32 address, uint64 *data);
-  virtual bool WriteMSR(uint32 core, uint32 address, uint64 *data);
+  virtual bool ReadMSR(uint32 core, uint32 address, uint64 *data,
+                       ocpdiag::results::TestStep &test_step);
 
   // Extract bits [n+len-1, n] from a 32 bit word.
   // so GetBitField(0x0f00, 8, 4) == 0xf.
@@ -376,7 +371,8 @@ class OsLayer {
   vector<bool> cpu_sets_valid_;  // If the cpu mask cache is valid.
 
   // Get file descriptor for dev msr.
-  virtual int OpenMSR(uint32 core, uint32 address);
+  virtual int OpenMSR(uint32 core, uint32 address,
+                      ocpdiag::results::TestStep &test_step);
 
   // Look up how many hugepages there are.
   virtual int64 FindHugePages(ocpdiag::results::TestStep &test_step);

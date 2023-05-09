@@ -41,6 +41,7 @@ cc_library(
         "@ocp_diag_core//ocpdiag/core/results/data_model:dut_info",
         "@ocp_diag_core//ocpdiag/core/results/data_model:input_model",
         "@ocp_diag_core//ocpdiag/core/results/data_model:input_model_helpers",
+        "@ocp_diag_core//ocpdiag/core/results/data_model:output_model",
     ],
 )
 

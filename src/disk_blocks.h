@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "ocpdiag/core/results/test_step.h"
 #include "sattypes.h"
 
 class Pattern;
@@ -102,7 +103,8 @@ class DiskBlockTable {
   // Returns a new block in a unused address. Does not
   // grant ownership of the pointer to the caller
   // (use RemoveBlock to delete the block from memory instead).
-  BlockData *GetUnusedBlock(int64 segment);
+  BlockData *GetUnusedBlock(int64 segment,
+                            ocpdiag::results::TestStep &test_step);
 
   // Removes block from structure (called by write threads). Returns
   // 1 if successful, 0 otherwise.

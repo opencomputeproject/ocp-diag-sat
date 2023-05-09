@@ -19,6 +19,7 @@
 // so these includes are correct.
 #include "adler32memcpy.h"
 #include "sattypes.h"
+#include "ocpdiag/core/results/test_step.h"
 
 // 2 = 128 bit bus, 1 = 64 bit bus, 0 = 32 bit bus
 const int kBusShift = 2;
@@ -44,7 +45,7 @@ class Pattern {
   ~Pattern();
   // Fill pattern data and calculate CRC.
   int Initialize(const struct PatternData &pattern_init, int buswidth,
-                 bool invert, int weight);
+                 bool invert, int weight, ocpdiag::results::TestStep &test_step);
 
   // Access data members.
   // "busshift_" allows for repeating each pattern word 1, 2, 4, etc. times.
@@ -78,11 +79,11 @@ class PatternList {
   PatternList();
   ~PatternList();
   // Initialize pointers to global data patterns, and calculate CRC.
-  int Initialize();
+  int Initialize(ocpdiag::results::TestStep &test_step);
   int Destroy();
 
   // Return the pattern designated by index i.
-  Pattern *GetPattern(int i);
+  Pattern *GetPattern(int i, ocpdiag::results::TestStep &test_step);
   // Return a random pattern according to the specified weighted probability.
   Pattern *GetRandomPattern();
   // Return the number of patterns available.

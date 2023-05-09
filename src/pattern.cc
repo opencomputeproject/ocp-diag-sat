@@ -10,8 +10,16 @@
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
+#include "absl/strings/str_format.h"
+#include "ocpdiag/core/results/data_model/input_model.h"
+#include "ocpdiag/core/results/test_step.h"
 #include "pattern.h"
 #include "sattypes.h"
+
+using ::ocpdiag::results::Error;
+using ::ocpdiag::results::Log;
+using ::ocpdiag::results::LogSeverity;
+using ::ocpdiag::results::TestStep;
 
 // Static data patterns.
 
@@ -223,7 +231,7 @@ int Pattern::CalculateCrc() {
 
 // Initialize pattern's CRC.
 int Pattern::Initialize(const struct PatternData &pattern_init, int buswidth,
-                        bool invert, int weight) {
+                        bool invert, int weight, TestStep &test_step) {
   int result = 1;
 
   pattern_ = &pattern_init;
@@ -249,7 +257,10 @@ int Pattern::Initialize(const struct PatternData &pattern_init, int buswidth,
     name_.append("256");
     busshift_ = 3;
   } else {
-    logprintf(0, "Process Error: Confused by bus width %d\n", buswidth);
+    test_step.AddError(Error{
+        .symptom = kProcessError,
+        .message = absl::StrFormat("Confused by bus width %d", buswidth),
+    });
     name_.append("Broken");
     result = 0;
   }
@@ -271,7 +282,7 @@ PatternList::~PatternList() {
 }
 
 // Fill in the class with references to the static data patterns
-int PatternList::Initialize() {
+int PatternList::Initialize(TestStep &test_step) {
   int patterncount = 0;
   int weightcount = 0;
 
@@ -280,36 +291,39 @@ int PatternList::Initialize() {
     // Non inverted.
     weightcount += pattern_array[i].weight[0];
     patterns_[patterncount++].Initialize(pattern_array[i], 32, false,
-                                         pattern_array[i].weight[0]);
+                                         pattern_array[i].weight[0], test_step);
     weightcount += pattern_array[i].weight[1];
     patterns_[patterncount++].Initialize(pattern_array[i], 64, false,
-                                         pattern_array[i].weight[1]);
+                                         pattern_array[i].weight[1], test_step);
     weightcount += pattern_array[i].weight[2];
     patterns_[patterncount++].Initialize(pattern_array[i], 128, false,
-                                         pattern_array[i].weight[2]);
+                                         pattern_array[i].weight[2], test_step);
     weightcount += pattern_array[i].weight[3];
     patterns_[patterncount++].Initialize(pattern_array[i], 256, false,
-                                         pattern_array[i].weight[3]);
+                                         pattern_array[i].weight[3], test_step);
 
     // Inverted.
     weightcount += pattern_array[i].weight[0];
     patterns_[patterncount++].Initialize(pattern_array[i], 32, true,
-                                         pattern_array[i].weight[0]);
+                                         pattern_array[i].weight[0], test_step);
     weightcount += pattern_array[i].weight[1];
     patterns_[patterncount++].Initialize(pattern_array[i], 64, true,
-                                         pattern_array[i].weight[1]);
+                                         pattern_array[i].weight[1], test_step);
     weightcount += pattern_array[i].weight[2];
     patterns_[patterncount++].Initialize(pattern_array[i], 128, true,
-                                         pattern_array[i].weight[2]);
+                                         pattern_array[i].weight[2], test_step);
     weightcount += pattern_array[i].weight[3];
     patterns_[patterncount++].Initialize(pattern_array[i], 256, true,
-                                         pattern_array[i].weight[3]);
+                                         pattern_array[i].weight[3], test_step);
   }
   size_ = patterncount;
   weightcount_ = weightcount;
   initialized_ = 1;
 
-  logprintf(12, "Log: initialized %d data patterns\n", size_);
+  test_step.AddLog(Log{
+      .severity = LogSeverity::kDebug,
+      .message = absl::StrFormat("Initialized %d data patters", size_),
+  });
 
   return 1;
 }
@@ -326,12 +340,15 @@ int PatternList::Destroy() {
 }
 
 // Return pattern numbered "i"
-Pattern *PatternList::GetPattern(int i) {
+Pattern *PatternList::GetPattern(int i, TestStep &test_step) {
   if (static_cast<unsigned int>(i) < size_) {
     return &patterns_[i];
   }
 
-  logprintf(0, "Process Error: Out of bounds pattern access\n");
+  test_step.AddError(Error{
+      .symptom = kProcessError,
+      .message = "Out of bounds pattern access",
+  });
   return 0;
 }
 

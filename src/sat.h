@@ -18,13 +18,13 @@
 
 #include "absl/strings/string_view.h"
 #include "finelock_queue.h"
+#include "ocpdiag/core/results/data_model/output_model.h"
 #include "ocpdiag/core/results/test_run.h"
 #include "ocpdiag/core/results/test_step.h"
 #include "os.h"
 #include "queue.h"
 #include "sattypes.h"
 #include "worker.h"
-
 
 // SAT stress test class.
 class Sat {
@@ -74,7 +74,7 @@ class Sat {
   int disk_pages() const { return disk_pages_; }
   int strict() const { return strict_; }
   int tag_mode() const { return tag_mode_; }
-  int status() const { return statuscount_; }
+  ocpdiag::results::TestResult status() const { return test_run_->Result(); }
   void bad_status() { statuscount_++; }
   int errors() const { return errorcount_; }
   int warm() const { return warm_; }
@@ -98,6 +98,8 @@ class Sat {
   bool error_injection() const { return error_injection_; }
 
  protected:
+  // Validates the command line arguments
+  bool ValidateArgs();
   // Opens log file for writing. Returns 0 on failure.
   bool InitializeLogfile();
   // Checks for supported environment. Returns 0 on failure.

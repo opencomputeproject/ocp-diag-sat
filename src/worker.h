@@ -771,35 +771,6 @@ class RandomDiskThread : public DiskThread {
   DISALLOW_COPY_AND_ASSIGN(RandomDiskThread);
 };
 
-// Worker thread to perform checks in a specific memory region.
-class MemoryRegionThread : public WorkerThread {
- public:
-  MemoryRegionThread();
-  ~MemoryRegionThread();
-  virtual bool Work();
-  void ProcessError(struct ErrorRecord *error, int priority,
-                    const char *message);
-  bool SetRegion(void *region, int64 size);
-  // Calculate worker thread specific bandwidth.
-  virtual float GetMemoryCopiedData() { return GetCopiedData(); }
-  virtual float GetDeviceCopiedData() { return GetCopiedData() * 2; }
-  void SetIdentifier(string identifier) { identifier_ = identifier; }
-
- protected:
-  // Page queue for this particular memory region.
-  char *region_;
-  PageEntryQueue *pages_;
-  bool error_injection_;
-  int phase_;
-  string identifier_;
-  static const int kPhaseNoPhase = 0;
-  static const int kPhaseCopy = 1;
-  static const int kPhaseCheck = 2;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MemoryRegionThread);
-};
-
 // Worker thread to check that the frequency of every cpu does not go below a
 // certain threshold.
 class CpuFreqThread : public WorkerThread {

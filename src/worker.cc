@@ -308,29 +308,16 @@ bool WorkerThread::InitPriority() {
   // This doesn't affect performance that much, and may not be too safe.
 
   bool ret = BindToCpus(&cpu_mask_);
-  if (!ret)
-    logprintf(11, "Log: Bind to %s failed.\n",
-              cpuset_format(&cpu_mask_).c_str());
-
-  logprintf(11, "Log: Thread %d running on core ID %d mask %s (%s).\n",
-            thread_num_, sched_getcpu(), CurrentCpusFormat().c_str(),
-            cpuset_format(&cpu_mask_).c_str());
-#if 0
-  if (priority_ == High) {
-    sched_param param;
-    param.sched_priority = 1;
-    // Set the priority; others are unchanged.
-    logprintf(0, "Log: Changing priority to SCHED_FIFO %d\n",
-              param.sched_priority);
-    if (sched_setscheduler(0, SCHED_FIFO, &param)) {
-      char buf[256];
-      sat_strerror(errno, buf, sizeof(buf));
-      logprintf(0, "Process Error: sched_setscheduler "
-                   "failed - error %d %s\n",
-                errno, buf);
-    }
+  if (!ret) {
+    AddLog(LogSeverity::kWarning,
+           absl::StrFormat("Bind to %s failed",
+                           cpuset_format(&cpu_mask_).c_str()));
   }
-#endif
+
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat("Running on core ID %d mask %s (%s)", sched_getcpu(),
+                         CurrentCpusFormat().c_str(),
+                         cpuset_format(&cpu_mask_).c_str()));
   return true;
 }
 
@@ -738,7 +725,7 @@ int WorkerThread::CheckRegion(void *addr, class Pattern *pattern,
   if (page_error && !tag_mode_) {
     int patsize = patternlist_->Size();
     for (int pat = 0; pat < patsize; pat++) {
-      class Pattern *altpattern = patternlist_->GetPattern(pat);
+      class Pattern *altpattern = patternlist_->GetPattern(pat, *test_step_);
       const int kGood = 0;
       const int kBad = 1;
       const int kGoodAgain = 2;
@@ -2795,7 +2782,7 @@ bool DiskThread::DoWork(int fd) {
       }
       block_num++;
 
-      BlockData *block = block_table_->GetUnusedBlock(segment);
+      BlockData *block = block_table_->GetUnusedBlock(segment, *test_step_);
 
       // If an unused sequence of sectors could not be found, skip to the
       // next block to process.  Soon, a new segment will come and new
@@ -3175,183 +3162,6 @@ bool RandomDiskThread::DoWork(int fd) {
   return true;
 }
 
-MemoryRegionThread::MemoryRegionThread() {
-  error_injection_ = false;
-  pages_ = NULL;
-}
-
-MemoryRegionThread::~MemoryRegionThread() {
-  if (pages_ != NULL) delete pages_;
-}
-
-// Set a region of memory or MMIO to be tested.
-// Return false if region could not be mapped.
-bool MemoryRegionThread::SetRegion(void *region, int64 size) {
-  int plength = sat_->page_length();
-  int npages = size / plength;
-  if (size % plength) {
-    logprintf(0,
-              "Process Error: region size is not a multiple of SAT "
-              "page length\n");
-    return false;
-  } else {
-    if (pages_ != NULL) delete pages_;
-    pages_ = new PageEntryQueue(npages);
-    char *base_addr = reinterpret_cast<char *>(region);
-    region_ = base_addr;
-    for (int i = 0; i < npages; i++) {
-      struct page_entry pe;
-      init_pe(&pe);
-      pe.addr = reinterpret_cast<void *>(base_addr + i * plength);
-      pe.offset = i * plength;
-
-      pages_->Push(&pe);
-    }
-    return true;
-  }
-}
-
-// More detailed error printout for hardware errors in memory or MMIO
-// regions.
-void MemoryRegionThread::ProcessError(struct ErrorRecord *error, int priority,
-                                      const char *message) {
-  uint32 buffer_offset;
-  if (phase_ == kPhaseCopy) {
-    // If the error occurred on the Copy Phase, it means that
-    // the source data (i.e., the main memory) is wrong. so
-    // just pass it to the original ProcessError to call a
-    // bad-dimm error
-    WorkerThread::ProcessError(error, message);
-  } else if (phase_ == kPhaseCheck) {
-    // A error on the Check Phase means that the memory region tested
-    // has an error. Gathering more information and then reporting
-    // the error.
-    // Determine if this is a write or read error.
-    os_->Flush(error->vaddr);
-    error->reread = *(error->vaddr);
-    char *good = reinterpret_cast<char *>(&(error->expected));
-    char *bad = reinterpret_cast<char *>(&(error->actual));
-    sat_assert(error->expected != error->actual);
-    unsigned int offset = 0;
-    for (offset = 0; offset < (sizeof(error->expected) - 1); offset++) {
-      if (good[offset] != bad[offset]) break;
-    }
-
-    error->vbyteaddr = reinterpret_cast<char *>(error->vaddr) + offset;
-
-    buffer_offset = error->vbyteaddr - region_;
-
-    // Find physical address if possible.
-    error->paddr = os_->VirtualToPhysical(error->vbyteaddr, *test_step_);
-    logprintf(priority,
-              "%s: miscompare on %s, CRC check at %p(0x%llx), "
-              "offset %llx: read:0x%016llx, reread:0x%016llx "
-              "expected:0x%016llx\n",
-              message, identifier_.c_str(), error->vaddr, error->paddr,
-              buffer_offset, error->actual, error->reread, error->expected);
-  } else {
-    logprintf(0,
-              "Process Error: memory region thread raised an "
-              "unexpected error.");
-  }
-}
-
-// Workload for testion memory or MMIO regions.
-// Return false on software error.
-bool MemoryRegionThread::Work() {
-  struct page_entry source_pe;
-  struct page_entry memregion_pe;
-  bool result = true;
-  int64 loops = 0;
-  const uint64 error_constant = 0x00ba00000000ba00LL;
-
-  // For error injection.
-  int64 *addr = 0x0;
-  int offset = 0;
-  int64 data = 0;
-
-  logprintf(9, "Log: Starting Memory Region thread %d\n", thread_num_);
-
-  while (IsReadyToRun()) {
-    // Getting pages from SAT and queue.
-    phase_ = kPhaseNoPhase;
-    result = result && sat_->GetValid(&source_pe, *test_step_);
-    if (!result) {
-      logprintf(0,
-                "Process Error: memory region thread failed to pop "
-                "pages from SAT, bailing\n");
-      break;
-    }
-
-    result = result && pages_->PopRandom(&memregion_pe);
-    if (!result) {
-      logprintf(0,
-                "Process Error: memory region thread failed to pop "
-                "pages from queue, bailing\n");
-      break;
-    }
-
-    // Error injection for CRC copy.
-    if ((sat_->error_injection() || error_injection_) && loops == 1) {
-      addr = reinterpret_cast<int64 *>(source_pe.addr);
-      offset = random() % (sat_->page_length() / wordsize_);
-      data = addr[offset];
-      addr[offset] = error_constant;
-    }
-
-    // Copying SAT page into memory region.
-    phase_ = kPhaseCopy;
-    CrcCopyPage(&memregion_pe, &source_pe);
-    memregion_pe.pattern = source_pe.pattern;
-    memregion_pe.lastcpu = sched_getcpu();
-
-    // Error injection for CRC Check.
-    if ((sat_->error_injection() || error_injection_) && loops == 2) {
-      addr = reinterpret_cast<int64 *>(memregion_pe.addr);
-      offset = random() % (sat_->page_length() / wordsize_);
-      data = addr[offset];
-      addr[offset] = error_constant;
-    }
-
-    // Checking page content in memory region.
-    phase_ = kPhaseCheck;
-    CrcCheckPage(&memregion_pe);
-
-    phase_ = kPhaseNoPhase;
-    // Storing pages on their proper queues.
-    result = result && sat_->PutValid(&source_pe, *test_step_);
-    if (!result) {
-      logprintf(0,
-                "Process Error: memory region thread failed to push "
-                "pages into SAT, bailing\n");
-      break;
-    }
-    result = result && pages_->Push(&memregion_pe);
-    if (!result) {
-      logprintf(0,
-                "Process Error: memory region thread failed to push "
-                "pages into queue, bailing\n");
-      break;
-    }
-
-    if ((sat_->error_injection() || error_injection_) && loops >= 1 &&
-        loops <= 2) {
-      addr[offset] = data;
-    }
-
-    loops++;
-    YieldSelf();
-  }
-
-  pages_copied_ = loops;
-  status_ = result;
-  logprintf(9,
-            "Log: Completed %d: Memory Region thread. Status %d, %d "
-            "pages checked\n",
-            thread_num_, status_, pages_copied_);
-  return result;
-}
-
 // The list of MSRs to read from each cpu.
 const CpuFreqThread::CpuRegisterType CpuFreqThread::kCpuRegisters[] = {
     {kMsrTscAddr, "TSC"},
@@ -3530,7 +3340,8 @@ bool CpuFreqThread::Work() {
 // any error is encountered, returns false. Otherwise, returns true.
 bool CpuFreqThread::GetMsrs(int cpu, CpuDataType *data) {
   for (int msr = 0; msr < kMsrLast; msr++) {
-    if (!os_->ReadMSR(cpu, kCpuRegisters[msr].msr, &data->msrs[msr])) {
+    if (!os_->ReadMSR(cpu, kCpuRegisters[msr].msr, &data->msrs[msr],
+                      *test_step_)) {
       return false;
     }
   }

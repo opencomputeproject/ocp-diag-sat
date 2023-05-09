@@ -12,6 +12,13 @@
 
 #include <utility>
 
+#include "absl/strings/str_format.h"
+#include "ocpdiag/core/results/data_model/input_model.h"
+#include "ocpdiag/core/results/test_step.h"
+
+using ::ocpdiag::results::Error;
+using ::ocpdiag::results::TestStep;
+
 // BlockData
 BlockData::BlockData()
     : address_(0),
@@ -187,15 +194,17 @@ void DiskBlockTable::SetParameters(int sector_size, int write_block_size,
   pthread_mutex_unlock(&parameter_mutex_);
 }
 
-BlockData *DiskBlockTable::GetUnusedBlock(int64 segment) {
+BlockData *DiskBlockTable::GetUnusedBlock(int64 segment, TestStep &test_step) {
   int64 sector = 0;
   BlockData *block = new BlockData();
   bool good_sequence = false;
   if (block == NULL) {
-    logprintf(0,
-              "Process Error: Unable to allocate memory "
-              "for sector data for disk %s.\n",
-              device_name_.c_str());
+    test_step.AddError(Error{
+        .symptom = kProcessError,
+        .message = absl::StrFormat(
+            "Unable to allocate memory for sector data for disk %s.",
+            device_name_),
+    });
     return NULL;
   }
   pthread_mutex_lock(&parameter_mutex_);

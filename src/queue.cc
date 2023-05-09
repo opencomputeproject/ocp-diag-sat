@@ -10,8 +10,14 @@
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
+#include "absl/strings/str_format.h"
+#include "ocpdiag/core/results/data_model/input_model.h"
+#include "ocpdiag/core/results/test_step.h"
 #include "queue.h"
 #include "sattypes.h"
+
+using ::ocpdiag::results::Error;
+using ::ocpdiag::results::TestStep;
 
 // Page entry queue implementation follows.
 // Push inserts pages, pop returns a random entry.
@@ -57,7 +63,7 @@ int PageEntryQueue::Push(struct page_entry *pe) {
 }
 
 // Retrieve a random page from this queue.
-int PageEntryQueue::PopRandom(struct page_entry *pe) {
+int PageEntryQueue::PopRandom(struct page_entry *pe, TestStep &test_step) {
   int result = 0;
   int64 lastin;
   int64 entries;
@@ -71,8 +77,12 @@ int PageEntryQueue::PopRandom(struct page_entry *pe) {
   uint64 rand = random();
 
   int retval = pthread_mutex_lock(&q_mutex_);
-  if (retval)
-    logprintf(0, "Process Error: pthreads mutex failure %d\n", retval);
+  if (retval) {
+    test_step.AddError(Error{
+        .symptom = kProcessError,
+        .message = absl::StrFormat("pthreads mutex failure %d", retval),
+    });
+  }
 
   if (nextin_ != nextout_) {
     // Randomized fetch.
