@@ -56,6 +56,8 @@
 #include "sattypes.h"  // NOLINT
 #include "worker.h"    // NOLINT
 
+using ::ocpdiag::results::Diagnosis;
+using ::ocpdiag::results::DiagnosisType;
 using ::ocpdiag::results::Error;
 using ::ocpdiag::results::Log;
 using ::ocpdiag::results::LogSeverity;
@@ -333,10 +335,8 @@ int WorkerThread::SpawnThread() {
   if (result) {
     char buf[256];
     sat_strerror(result, buf, sizeof(buf));
-    test_step_->AddError(
-        Error{.symptom = kProcessError,
-              .message =
-                  "pthread_create failed when trying to spawn a test thread."});
+    AddProcessError(
+        "pthread_create failed when trying to spawn a test thread.");
     status_ = false;
     return false;
   }
@@ -353,10 +353,8 @@ bool WorkerThread::JoinThread() {
   int result = pthread_join(thread_, NULL);
 
   if (result) {
-    test_step_->AddError(
-        Error{.symptom = kProcessError,
-              .message = absl::StrFormat(
-                  "pthread_join failed with error code %d.", result)});
+    AddProcessError(
+        absl::StrFormat("pthread_join failed with error code %d.", result));
     status_ = false;
   }
 
@@ -446,13 +444,26 @@ bool WorkerThread::BindToCpus(const cpu_set_t *thread_mask) {
 //   Returns true on success, false on error.
 bool WorkerThread::YieldSelf() { return (sched_yield() == 0); }
 
+void WorkerThread::AddLog(LogSeverity severity, string message) {
+  test_step_->AddLog(
+      Log{.severity = severity,
+          .message = absl::StrFormat("%s #%d: %s", GetThreadTypeName(),
+                                     thread_num_, message)});
+}
+
+void WorkerThread::AddProcessError(string message) {
+  test_step_->AddError(
+      Error{.symptom = kProcessError,
+            .message = absl::StrFormat("%s #%d: %s", GetThreadTypeName(),
+                                       thread_num_, message)});
+}
+
 // Fill this page with its pattern.
 bool WorkerThread::FillPage(struct page_entry *pe) {
   // Error check arguments.
   if (pe == 0) {
-    test_step_->AddLog(
-        {.severity = LogSeverity::kError,
-         .message = "Attempted to fill a memory page with a null page entry"});
+    AddLog(LogSeverity::kError,
+           "Attempted to fill a memory page with a null page entry");
     return 0;
   }
 
@@ -500,14 +511,12 @@ void FillThread::SetFillPages(int64 num_pages_to_fill_init) {
 bool FillThread::FillPageRandom(struct page_entry *pe) {
   // Error check arguments.
   if (pe == 0) {
-    test_step_->AddLog({.severity = LogSeverity::kError,
-                        .message = "Attempted to fill a null page entry"});
+    AddLog(LogSeverity::kError, "Attempted to fill a null page entry");
     return 0;
   }
   if ((patternlist_ == 0) || (patternlist_->Size() == 0)) {
-    test_step_->AddLog(
-        {.severity = LogSeverity::kError,
-         .message = "No data patterns available when filling memory pages"});
+    AddLog(LogSeverity::kError,
+           "No data patterns available when filling memory pages");
     return 0;
   }
 
@@ -516,10 +525,8 @@ bool FillThread::FillPageRandom(struct page_entry *pe) {
   pe->lastcpu = sched_getcpu();
 
   if (pe->pattern == 0) {
-    test_step_->AddLog(
-        {.severity = LogSeverity::kError,
-         .message =
-             "Attempted to fill a memory page with a null memory pattern"});
+    AddLog(LogSeverity::kError,
+           "Attempted to fill a memory page with a null memory pattern");
     return 0;
   }
 
@@ -530,9 +537,7 @@ bool FillThread::FillPageRandom(struct page_entry *pe) {
 // Memory fill work loop. Execute until alloted pages filled.
 bool FillThread::Work() {
   bool result = true;
-  test_step_->AddLog({.severity = LogSeverity::kDebug,
-                      .message = absl::StrFormat(
-                          "Starting memory page fill thread %d", thread_num_)});
+  AddLog(LogSeverity::kDebug, "Starting memory page fill thread");
 
   // We want to fill num_pages_to_fill pages, and
   // stop when we've filled that many.
@@ -542,11 +547,7 @@ bool FillThread::Work() {
   while (IsReadyToRun() && (loops < num_pages_to_fill_)) {
     result = result && sat_->GetEmpty(&pe);
     if (!result) {
-      test_step_->AddLog(
-          {.severity = LogSeverity::kError,
-           .message = absl::StrFormat(
-               "Fill thread %d failed to pop pages, exiting thread",
-               thread_num_)});
+      AddLog(LogSeverity::kError, "Failed to pop pages, exiting thread");
       break;
     }
 
@@ -557,11 +558,7 @@ bool FillThread::Work() {
     // Put the page back on the queue.
     result = result && sat_->PutValid(&pe);
     if (!result) {
-      test_step_->AddLog(
-          {.severity = LogSeverity::kError,
-           .message = absl::StrFormat(
-               "Fill thread %d failed to push pages, exiting thread",
-               thread_num_)});
+      AddLog(LogSeverity::kError, "Failed to push pages, exiting thread");
       break;
     }
     loops++;
@@ -570,16 +567,14 @@ bool FillThread::Work() {
   // Fill in thread status.
   pages_copied_ = loops;
   status_ = result;
-  test_step_->AddLog(
-      {.severity = LogSeverity::kDebug,
-       .message = absl::StrFormat(
-           "Memory page fill thread %d completed. Status: %d. Filled %d pages.",
-           thread_num_, status_, pages_copied_)});
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat("Completed. Status: %s. Filled %d pages.",
+                         status_ ? "Success" : "Fail", pages_copied_));
   return result;
 }
 
 // Print error information about a data miscompare.
-void WorkerThread::ProcessError(struct ErrorRecord *error, int priority,
+void WorkerThread::ProcessError(struct ErrorRecord *error,
                                 const char *message) {
   char dimm_string[256] = "";
 
@@ -607,20 +602,17 @@ void WorkerThread::ProcessError(struct ErrorRecord *error, int priority,
   os_->FindDimm(error->paddr, dimm_string, sizeof(dimm_string));
 
   // Report parseable error.
-  if (priority < 5) {
-    // Run miscompare error through diagnoser for logging and reporting.
-    // TODO(b/275900374) Make this a diagnosis
-    // os_->error_diagnoser_->AddMiscompareError(
-    //     dimm_string, reinterpret_cast<uint64>(error->vaddr), 1);
-
-    logprintf(priority,
-              "%s: miscompare on CPU %d(<-%d) at %p(0x%llx:%s): "
-              "read:0x%016llx, reread:0x%016llx expected:0x%016llx. '%s'%s.\n",
-              message, core_id, error->lastcpu, error->vaddr, error->paddr,
-              dimm_string, error->actual, error->reread, error->expected,
-              (error->patternname) ? error->patternname : "None",
-              (error->reread == error->expected) ? " read error" : "");
-  }
+  // TODO(b/273815895): Add hwinfo for cpu and dimms
+  test_step_->AddDiagnosis(Diagnosis{
+      .verdict = kMemoryCopyFailVerdict,
+      .type = DiagnosisType::kFail,
+      .message = absl::StrFormat(
+          "%s: miscompare on CPU %d(<-%d) at %p(0x%llx:%s): "
+          "read:0x%016llx, reread:0x%016llx expected:0x%016llx. '%s'%s.\n",
+          message, core_id, error->lastcpu, error->vaddr, error->paddr,
+          dimm_string, error->actual, error->reread, error->expected,
+          (error->patternname) ? error->patternname : "None",
+          (error->reread == error->expected) ? " read error" : "")});
 
   // Overwrite incorrect data with correct data to prevent
   // future miscompares when this data is reused.
@@ -629,8 +621,7 @@ void WorkerThread::ProcessError(struct ErrorRecord *error, int priority,
 }
 
 // Print error information about a data miscompare.
-void FileThread::ProcessError(struct ErrorRecord *error, int priority,
-                              const char *message) {
+void FileThread::ProcessError(struct ErrorRecord *error, const char *message) {
   char dimm_string[256] = "";
 
   // Determine if this is a write or read error.
@@ -670,7 +661,8 @@ void FileThread::ProcessError(struct ErrorRecord *error, int priority,
     //     dimm_string, reinterpret_cast<uint64>(error->vaddr), 1);
   }
 
-  logprintf(priority,
+  // TODO(b/275900374) Change this to be a diagnosis
+  logprintf(0,
             "%s: miscompare on %s at %p(0x%llx:%s): read:0x%016llx, "
             "reread:0x%016llx expected:0x%016llx\n",
             message, devicename_.c_str(), error->vaddr, error->paddr,
@@ -725,7 +717,8 @@ int WorkerThread::CheckRegion(void *addr, class Pattern *pattern,
       } else {
         page_error = true;
         // If we have overflowed the error queue, just print the errors now.
-        logprintf(10, "Log: Error record overflow, too many miscompares!\n");
+        AddLog(LogSeverity::kDebug,
+               "Error record overflow, too many miscompares");
         errormessage = "Page Error";
         break;
       }
@@ -801,24 +794,21 @@ int WorkerThread::CheckRegion(void *addr, class Pattern *pattern,
         // It's okay for the 1st entry to be corrected multiple times,
         // it will simply be reported twice. Once here and once below
         // when processing the error queue.
-        ProcessError(&recorded[0], 0, errormessage.c_str());
-        logprintf(0,
-                  "Block Error: (%p) pattern %s instead of %s, "
-                  "%d bytes from offset 0x%x to 0x%x\n",
-                  &memblock[badstart], altpattern->name(), pattern->name(),
-                  blockerrors * wordsize_, offset + badstart * wordsize_,
-                  offset + badend * wordsize_);
+        ProcessError(&recorded[0], errormessage.c_str());
+        AddLog(LogSeverity::kError,
+               absl::StrFormat("Block Error: (%p) pattern %s instead of %s, "
+                               "%d bytes from offset 0x%x to 0x%x\n",
+                               &memblock[badstart], altpattern->name(),
+                               pattern->name(), blockerrors * wordsize_,
+                               offset + badstart * wordsize_,
+                               offset + badend * wordsize_));
       }
     }
   }
 
   // Process error queue after all errors have been recorded.
-  for (int err = 0; err < errors; err++) {
-    int priority = 5;
-    if (errorcount_ + err < 30)
-      priority = 0;  // Bump up the priority for the first few errors.
-    ProcessError(&recorded[err], priority, errormessage.c_str());
-  }
+  for (int err = 0; err < errors; err++)
+    ProcessError(&recorded[err], errormessage.c_str());
 
   if (page_error) {
     // For each word in the data region.
@@ -848,7 +838,7 @@ int WorkerThread::CheckRegion(void *addr, class Pattern *pattern,
 
         // Do the error printout. This will take a long time and
         // likely change the machine state.
-        ProcessError(&er, 12, errormessage.c_str());
+        ProcessError(&er, errormessage.c_str());
         overflowerrors++;
       }
     }
@@ -913,7 +903,7 @@ int WorkerThread::CrcCheckPage(struct page_entry *srcpe) {
 }
 
 // Print error information about a data miscompare.
-void WorkerThread::ProcessTagError(struct ErrorRecord *error, int priority,
+void WorkerThread::ProcessTagError(struct ErrorRecord *error,
                                    const char *message) {
   char dimm_string[256] = "";
   char tag_dimm_string[256] = "";
@@ -944,16 +934,18 @@ void WorkerThread::ProcessTagError(struct ErrorRecord *error, int priority,
   os_->FindDimm(error->tagpaddr, tag_dimm_string, sizeof(tag_dimm_string));
 
   // Report parseable error.
-  if (priority < 5) {
-    logprintf(priority,
-              "%s: Tag from %p(0x%llx:%s) (%s) "
-              "miscompare on CPU %d(0x%s) at %p(0x%llx:%s): "
-              "read:0x%016llx, reread:0x%016llx expected:0x%016llx\n",
-              message, error->tagvaddr, error->tagpaddr, tag_dimm_string,
-              read_error ? "read error" : "write error", core_id,
-              CurrentCpusFormat().c_str(), error->vaddr, error->paddr,
-              dimm_string, error->actual, error->reread, error->expected);
-  }
+  // TODO(b/273815895): Add hwinfo for cpu and dimms
+  test_step_->AddDiagnosis(Diagnosis{
+      .verdict = kMemoryCopyFailVerdict,
+      .type = DiagnosisType::kFail,
+      .message = absl::StrFormat(
+          "%s: Tag from %p(0x%llx:%s) (%s) "
+          "miscompare on CPU %d(0x%s) at %p(0x%llx:%s): "
+          "read:0x%016llx, reread:0x%016llx expected:0x%016llx\n",
+          message, error->tagvaddr, error->tagpaddr, tag_dimm_string,
+          read_error ? "read error" : "write error", core_id,
+          CurrentCpusFormat(), error->vaddr, error->paddr, dimm_string,
+          error->actual, error->reread, error->expected)});
 
   errorcount_ += 1;
 
@@ -974,7 +966,7 @@ bool WorkerThread::ReportTagError(uint64 *mem64, uint64 actual, uint64 tag) {
   // Generate vaddr from tag.
   er.tagvaddr = reinterpret_cast<uint64 *>(actual);
 
-  ProcessTagError(&er, 0, "Hardware Error");
+  ProcessTagError(&er, "Hardware Error");
   return true;
 }
 
@@ -1173,18 +1165,18 @@ int WorkerThread::CrcCopyPage(struct page_entry *dstpe,
 
     // Investigate miscompares.
     if (!crc.Equals(*expectedcrc)) {
-      logprintf(11,
-                "Log: CrcCopyPage Falling through to slow compare, "
-                "CRC mismatch %s != %s\n",
-                crc.ToHexString().c_str(), expectedcrc->ToHexString().c_str());
+      AddLog(LogSeverity::kDebug,
+             absl::StrFormat("CrcCopyPage Falling through to slow "
+                             "compare, CRC mismatch %s != %s",
+                             crc.ToHexString(), expectedcrc->ToHexString()));
       int errorcount = CheckRegion(sourcemem, srcpe->pattern, srcpe->lastcpu,
                                    blocksize, currentblock * blocksize, 0);
       if (errorcount == 0) {
-        logprintf(0,
-                  "Log: CrcCopyPage CRC mismatch %s != %s, "
-                  "but no miscompares found. Retrying with fresh data.\n",
-                  crc.ToHexString().c_str(),
-                  expectedcrc->ToHexString().c_str());
+        AddLog(LogSeverity::kWarning,
+               absl::StrFormat("CrcCopyPage CRC mismatch %s != %s, but no "
+                               "miscompares found. Retrying with fresh data.",
+                               crc.ToHexString().c_str(),
+                               expectedcrc->ToHexString().c_str()));
         if (!tag_mode_) {
           // Copy the data originally read from this region back again.
           // This data should have any corruption read originally while
@@ -1194,21 +1186,22 @@ int WorkerThread::CrcCopyPage(struct page_entry *dstpe,
                                    blocksize, currentblock * blocksize, 0);
           if (errorcount == 0) {
             int core_id = sched_getcpu();
-            logprintf(0,
-                      "Process Error: CPU %d(0x%s) CrcCopyPage "
-                      "CRC mismatch %s != %s, "
-                      "but no miscompares found on second pass.\n",
-                      core_id, CurrentCpusFormat().c_str(),
-                      crc.ToHexString().c_str(),
-                      expectedcrc->ToHexString().c_str());
+            AddLog(
+                LogSeverity::kError,
+                absl::StrFormat("CPU %d(0x%s) CrcCopyPage CRC mismatch %s != "
+                                "%s, but no miscompares found on second pass.",
+                                core_id, CurrentCpusFormat().c_str(),
+                                crc.ToHexString().c_str(),
+                                expectedcrc->ToHexString().c_str()));
             struct ErrorRecord er;
             er.actual = sourcemem[0];
             er.expected = 0xbad00000ull << 32;
             er.vaddr = sourcemem;
             er.lastcpu = srcpe->lastcpu;
-            logprintf(0, "Process Error: lastCPU %d\n", srcpe->lastcpu);
+            AddLog(LogSeverity::kError,
+                   absl::StrFormat("lastCPU is %d\n", srcpe->lastcpu));
             er.patternname = srcpe->pattern->name();
-            ProcessError(&er, 0, "Hardware Error");
+            ProcessError(&er, "Hardware Error");
             errors += 1;
             errorcount_++;
           }
@@ -1324,18 +1317,20 @@ int WorkerThread::CrcWarmCopyPage(struct page_entry *dstpe,
 
     // Investigate miscompares.
     if (!crc.Equals(*expectedcrc)) {
-      logprintf(11,
-                "Log: CrcWarmCopyPage Falling through to slow compare, "
-                "CRC mismatch %s != %s\n",
-                crc.ToHexString().c_str(), expectedcrc->ToHexString().c_str());
+      AddLog(LogSeverity::kDebug,
+             absl::StrFormat("CrcWarmCopyPage Falling through to slow compare, "
+                             "CRC mismatch %s != %s",
+                             crc.ToHexString().c_str(),
+                             expectedcrc->ToHexString()));
       int errorcount = CheckRegion(sourcemem, srcpe->pattern, srcpe->lastcpu,
                                    blocksize, currentblock * blocksize, 0);
       if (errorcount == 0) {
-        logprintf(
-            0,
-            "Log: CrcWarmCopyPage CRC mismatch expected: %s != actual: %s, "
-            "but no miscompares found. Retrying with fresh data.\n",
-            expectedcrc->ToHexString().c_str(), crc.ToHexString().c_str());
+        AddLog(
+            LogSeverity::kWarning,
+            absl::StrFormat(
+                "CrcWarmCopyPage CRC mismatch expected: %s != actual: %s, but "
+                "no miscompares found. Retrying with fresh data.",
+                expectedcrc->ToHexString().c_str(), crc.ToHexString().c_str()));
         if (!tag_mode_) {
           // Copy the data originally read from this region back again.
           // This data should have any corruption read originally while
@@ -1345,20 +1340,20 @@ int WorkerThread::CrcWarmCopyPage(struct page_entry *dstpe,
                                    blocksize, currentblock * blocksize, 0);
           if (errorcount == 0) {
             int core_id = sched_getcpu();
-            logprintf(0,
-                      "Process Error: CPU %d(0x%s) CrciWarmCopyPage "
-                      "CRC mismatch %s != %s, "
-                      "but no miscompares found on second pass.\n",
-                      core_id, CurrentCpusFormat().c_str(),
-                      crc.ToHexString().c_str(),
-                      expectedcrc->ToHexString().c_str());
+            AddLog(LogSeverity::kError,
+                   absl::StrFormat("CPU %d(0x%s) CrciWarmCopyPage "
+                                   "CRC mismatch %s != %s, "
+                                   "but no miscompares found on second pass.\n",
+                                   core_id, CurrentCpusFormat().c_str(),
+                                   crc.ToHexString().c_str(),
+                                   expectedcrc->ToHexString().c_str()));
             struct ErrorRecord er;
             er.actual = sourcemem[0];
             er.expected = 0xbad;
             er.vaddr = sourcemem;
             er.lastcpu = srcpe->lastcpu;
             er.patternname = srcpe->pattern->name();
-            ProcessError(&er, 0, "Hardware Error");
+            ProcessError(&er, "Hardware Error");
             errors++;
             errorcount_++;
           }
@@ -1449,20 +1444,19 @@ bool CopyThread::Work() {
   bool result = true;
   int64 loops = 0;
 
-  logprintf(9,
-            "Log: Starting copy thread %d: cpu %s, "
-            "mem %x, warm: %d, has_vector: %d\n",
-            thread_num_, cpuset_format(&cpu_mask_).c_str(), tag_, sat_->warm(),
-            os_->has_vector());
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat("Starting memory copy thread. CPU: %s, Mem: %x, "
+                         "Warming: %s, Has Vector: %s",
+                         cpuset_format(&cpu_mask_), tag_,
+                         sat_->warm() ? "Yes" : "No",
+                         os_->has_vector() ? "Yes" : "No"));
 
   while (IsReadyToRun()) {
     // Pop the needed pages.
     result = result && sat_->GetValid(&src, tag_);
     result = result && sat_->GetEmpty(&dst, tag_);
     if (!result) {
-      logprintf(0,
-                "Process Error: copy_thread failed to pop pages, "
-                "bailing\n");
+      AddProcessError("Failed to pop pages");
       break;
     }
 
@@ -1497,9 +1491,7 @@ bool CopyThread::Work() {
     YieldSelf();
 
     if (!result) {
-      logprintf(0,
-                "Process Error: copy_thread failed to push pages, "
-                "bailing\n");
+      AddProcessError("Failed to push pages.");
       break;
     }
     loops++;
@@ -1507,8 +1499,9 @@ bool CopyThread::Work() {
 
   pages_copied_ = loops;
   status_ = result;
-  logprintf(9, "Log: Completed %d: Copy thread. Status %d, %d pages copied\n",
-            thread_num_, status_, pages_copied_);
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat("Status: %s, %d pages copied.",
+                         status_ ? "Success" : "Fail", pages_copied_));
   return result;
 }
 
@@ -3239,7 +3232,7 @@ void MemoryRegionThread::ProcessError(struct ErrorRecord *error, int priority,
     // the source data (i.e., the main memory) is wrong. so
     // just pass it to the original ProcessError to call a
     // bad-dimm error
-    WorkerThread::ProcessError(error, priority, message);
+    WorkerThread::ProcessError(error, message);
   } else if (phase_ == kPhaseCheck) {
     // A error on the Check Phase means that the memory region tested
     // has an error. Gathering more information and then reporting
