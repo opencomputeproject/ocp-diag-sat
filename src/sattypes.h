@@ -18,6 +18,8 @@
 #include <algorithm>
 #include <string>
 
+#include "ocpdiag/core/results/data_model/input_model.h"
+#include "ocpdiag/core/results/test_step.h"
 #include "stressapptest_config.h"  // NOLINT
 #ifndef _LIBCPP_VERSION
 using namespace __gnu_cxx;  // NOLINT
@@ -59,17 +61,9 @@ void logprintf(int priority, const char *format, ...);
 // Stop the log and dump any queued lines.
 void logstop();
 
-// We print to stderr ourselves first in case we're in such a bad state that the
-// logger can't work.
-#define sat_assert(x)                                                     \
-  {                                                                       \
-    if (!(x)) {                                                           \
-      logstop();                                                          \
-      fprintf(stderr, "Assertion failed at %s:%d\n", __FILE__, __LINE__); \
-      logprintf(0, "Assertion failed at %s:%d\n", __FILE__, __LINE__);    \
-      exit(1);                                                            \
-    }                                                                     \
-  }
+inline void sat_assert(bool condition, ocpdiag::results::TestStep &test_step) {
+  if (!x) test_step.AddLog(LogSeverity::kFatal, "Assertion failed");
+}
 
 #if !defined(CPU_SETSIZE)
 // Define type and macros for cpu mask operations
