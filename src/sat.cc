@@ -1266,7 +1266,6 @@ void Sat::InitializeThreads() {
   if (memory_threads_ > 0) thread_test_steps_.push_back(std::move(copy_step));
 
   // File IO threads.
-  // TODO(b/275900374) Populate file IO step
   std::unique_ptr<TestStep> file_io_step;
   if (file_threads_ > 0) {
     file_io_step =
@@ -1288,7 +1287,6 @@ void Sat::InitializeThreads() {
   if (file_threads_ > 0) thread_test_steps_.push_back(std::move(file_io_step));
 
   // Net IO threads.
-  // TODO(b/274516894) Populate net listen step
   WorkerVector *netslave_vector = new WorkerVector();
   if (listen_threads_ > 0) {
     auto net_listen_step = std::make_unique<TestStep>(
@@ -1302,7 +1300,6 @@ void Sat::InitializeThreads() {
     netslave_vector->insert(netslave_vector->end(), thread);
   }
 
-  // TODO(b/274517465) Populate net IO step
   std::unique_ptr<TestStep> net_io_step;
   if (net_threads_ > 0) {
     net_io_step =

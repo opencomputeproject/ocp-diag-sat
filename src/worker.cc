@@ -1958,7 +1958,7 @@ void NetworkThread::SetIP(const char *ipaddr_init) {
 bool NetworkThread::CreateSocket(int *psocket) {
   int sock = socket(AF_INET, SOCK_STREAM, 0);
   if (sock == -1) {
-    logprintf(0, "Process Error: Cannot open socket\n");
+    AddProcessError("Cannot open socket");
     pages_copied_ = 0;
     status_ = false;
     return false;
@@ -1982,7 +1982,7 @@ bool NetworkThread::Connect(int sock) {
 
   // Translate dot notation to u32.
   if (inet_aton(ipaddr_, &dest_addr.sin_addr) == 0) {
-    logprintf(0, "Process Error: Cannot resolve %s\n", ipaddr_);
+    AddProcessError(absl::StrFormat("Cannot resolve %s", ipaddr_));
     pages_copied_ = 0;
     status_ = false;
     return false;
@@ -1990,7 +1990,7 @@ bool NetworkThread::Connect(int sock) {
 
   if (-1 == connect(sock, reinterpret_cast<struct sockaddr *>(&dest_addr),
                     sizeof(struct sockaddr))) {
-    logprintf(0, "Process Error: Cannot connect %s\n", ipaddr_);
+    AddProcessError(absl::StrFormat("Cannot connect to %s", ipaddr_));
     pages_copied_ = 0;
     status_ = false;
     return false;
@@ -2011,7 +2011,7 @@ bool NetworkListenThread::Listen() {
   if (-1 == ::bind(sock_, (struct sockaddr *)&sa, sizeof(struct sockaddr))) {
     char buf[256];
     sat_strerror(errno, buf, sizeof(buf));
-    logprintf(0, "Process Error: Cannot bind socket: %s\n", buf);
+    AddProcessError(absl::StrFormat("Cannot bind socket: %s", buf));
     pages_copied_ = 0;
     status_ = false;
     return false;
@@ -2045,7 +2045,7 @@ bool NetworkListenThread::GetConnection(int *pnewsock) {
 
   int newsock = accept(sock_, reinterpret_cast<struct sockaddr *>(&sa), &size);
   if (newsock < 0) {
-    logprintf(0, "Process Error: Did not receive connection\n");
+    AddProcessError("Did not receive connection.");
     pages_copied_ = 0;
     status_ = false;
     return false;
@@ -2067,10 +2067,8 @@ bool NetworkThread::SendPage(int sock, struct page_entry *src) {
       if (!IsNetworkStopSet()) {
         char buf[256] = "";
         sat_strerror(errno, buf, sizeof(buf));
-        logprintf(0,
-                  "Process Error: Thread %d, "
-                  "Network write failed, bailing. (%s)\n",
-                  thread_num_, buf);
+        AddProcessError(
+            absl::StrFormat("Network write failed with error %s", buf));
         status_ = false;
       }
       return false;
@@ -2097,27 +2095,28 @@ bool NetworkThread::ReceivePage(int sock, struct page_entry *dst) {
         if (transferred == 0 && err == 0) {
           // Two system setups will not sync exactly,
           // allow early exit, but log it.
-          logprintf(0, "Log: Net thread did not receive any data, exiting.\n");
+          AddLog(LogSeverity::kInfo,
+                 "Net thread did not receive any data, exiting");
         } else {
           char buf[256] = "";
           sat_strerror(err, buf, sizeof(buf));
           // Print why we failed.
-          logprintf(0,
-                    "Process Error: Thread %d, "
-                    "Network read failed, bailing (%s).\n",
-                    thread_num_, buf);
+          AddProcessError(
+              absl::StrFormat("Network read failed with error %s", buf));
           status_ = false;
           // Print arguments and results.
-          logprintf(0, "Log: recv(%d, address %x, size %x, 0) == %x, err %d\n",
-                    sock, address + (page_length - size), size, transferred,
-                    err);
+          AddLog(LogSeverity::kError,
+                 absl::StrFormat(
+                     "recv(%d, address %x, size %x, 0) == %x, err %d", sock,
+                     address + (page_length - size), size, transferred, err));
           if ((transferred == 0) && (page_length - size < 512) &&
               (page_length - size > 0)) {
             // Print null terminated data received, to see who's been
             // sending us supicious unwanted data.
             address[page_length - size] = 0;
-            logprintf(0, "Log: received  %d bytes: '%s'\n", page_length - size,
-                      address);
+            AddLog(LogSeverity::kError,
+                   absl::StrFormat("received %d bytes: '%s'",
+                                   page_length - size, address));
           }
         }
       }
@@ -2131,8 +2130,8 @@ bool NetworkThread::ReceivePage(int sock, struct page_entry *dst) {
 // Network IO work loop. Execute until marked done.
 // Return true if the thread ran as expected.
 bool NetworkThread::Work() {
-  logprintf(9, "Log: Starting network thread %d, ip %s\n", thread_num_,
-            ipaddr_);
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat("Starting network thread on ip %s", ipaddr_));
 
   // Make a socket.
   int sock = 0;
@@ -2143,8 +2142,9 @@ bool NetworkThread::Work() {
   // listening by the time we connect.
   // Sleep for 15 seconds.
   sat_sleep(15);
-  logprintf(9, "Log: Starting execution of network thread %d, ip %s\n",
-            thread_num_, ipaddr_);
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat("Starting execution of network thread on ip %s",
+                         ipaddr_));
 
   // Connect to a slave thread.
   if (!Connect(sock)) return false;
@@ -2159,9 +2159,7 @@ bool NetworkThread::Work() {
     result = result && sat_->GetValid(&src, *test_step_);
     result = result && sat_->GetEmpty(&dst, *test_step_);
     if (!result) {
-      logprintf(0,
-                "Process Error: net_thread failed to pop pages, "
-                "bailing\n");
+      AddProcessError("Network thread failed to pop pages");
       break;
     }
 
@@ -2185,9 +2183,7 @@ bool NetworkThread::Work() {
     result = result && sat_->PutValid(&dst, *test_step_);
     result = result && sat_->PutEmpty(&src, *test_step_);
     if (!result) {
-      logprintf(0,
-                "Process Error: net_thread failed to push pages, "
-                "bailing\n");
+      AddProcessError("Network thread failed to push pages");
       break;
     }
     loops++;
@@ -2199,16 +2195,17 @@ bool NetworkThread::Work() {
   // Clean up.
   CloseSocket(sock);
 
-  logprintf(9,
-            "Log: Completed %d: network thread status %d, "
-            "%d pages copied\n",
-            thread_num_, status_, pages_copied_);
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat(
+             "Network thread completed with status %d, %d pages copied",
+             status_, pages_copied_));
   return result;
 }
 
 // Spawn slave threads for incoming connections.
 bool NetworkListenThread::SpawnSlave(int newsock, int threadid) {
-  logprintf(12, "Log: Listen thread spawning slave\n");
+  AddLog(LogSeverity::kDebug,
+         "Listen thread spawning child thread to handle connection");
 
   // Spawn slave thread, to reflect network traffic back to sender.
   ChildWorker *child_worker = new ChildWorker;
@@ -2226,20 +2223,17 @@ bool NetworkListenThread::SpawnSlave(int newsock, int threadid) {
 bool NetworkListenThread::ReapSlaves() {
   bool result = true;
   // Gather status and reap threads.
-  logprintf(12, "Log: Joining all outstanding threads\n");
+  AddLog(LogSeverity::kDebug, "Joining all outstanding threads");
 
   for (size_t i = 0; i < child_workers_.size(); i++) {
     NetworkSlaveThread &child_thread = child_workers_[i]->thread;
-    logprintf(12, "Log: Joining slave thread %d\n", i);
+    AddLog(LogSeverity::kDebug, absl::StrFormat("Joining child thread %d", i));
     child_thread.JoinThread();
-    if (child_thread.GetStatus() != 1) {
-      logprintf(0, "Process Error: Slave Thread %d failed with status %d\n", i,
-                child_thread.GetStatus());
-      result = false;
-    }
+    if (child_thread.GetStatus() != 1) result = false;
     errorcount_ += child_thread.GetErrorCount();
-    logprintf(9, "Log: Slave Thread %d found %lld miscompares\n", i,
-              child_thread.GetErrorCount());
+    AddLog(LogSeverity::kDebug,
+           absl::StrFormat("Child thread %d found %lld miscompares", i,
+                           child_thread.GetErrorCount()));
     pages_copied_ += child_thread.GetPageCount();
   }
 
@@ -2249,7 +2243,7 @@ bool NetworkListenThread::ReapSlaves() {
 // Network listener IO work loop. Execute until marked done.
 // Return false on fatal software error.
 bool NetworkListenThread::Work() {
-  logprintf(9, "Log: Starting network listen thread %d\n", thread_num_);
+  AddLog(LogSeverity::kDebug, "Starting network listen thread");
 
   // Make a socket.
   sock_ = 0;
@@ -2257,12 +2251,12 @@ bool NetworkListenThread::Work() {
     status_ = false;
     return false;
   }
-  logprintf(9, "Log: Listen thread created sock\n");
+  AddLog(LogSeverity::kDebug, "Listen thread created socket");
 
   // Allows incoming connections to be queued up by socket library.
   int newsock = 0;
   Listen();
-  logprintf(12, "Log: Listen thread waiting for incoming connections\n");
+  AddLog(LogSeverity::kDebug, "Listen thread waiting for incoming connections");
 
   // Wait on incoming connections, and spawn worker threads for them.
   int threadcount = 0;
@@ -2270,7 +2264,8 @@ bool NetworkListenThread::Work() {
     // Poll for connections that we can accept().
     if (Wait()) {
       // Accept those connections.
-      logprintf(12, "Log: Listen thread found incoming connection\n");
+      AddLog(LogSeverity::kDebug,
+             "Listen thread found incoming connection, spawning child thread");
       if (GetConnection(&newsock)) {
         SpawnSlave(newsock, threadcount);
         threadcount++;
@@ -2292,10 +2287,10 @@ bool NetworkListenThread::Work() {
   CloseSocket(sock_);
 
   status_ = true;
-  logprintf(9,
-            "Log: Completed %d: network listen thread status %d, "
-            "%d pages copied\n",
-            thread_num_, status_, pages_copied_);
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat(
+             "Network listen thread completed status %d, %d pages copied",
+             status_, pages_copied_));
   return true;
 }
 
@@ -2305,7 +2300,7 @@ void NetworkSlaveThread::SetSock(int sock) { sock_ = sock; }
 // Network reflector IO work loop. Execute until marked done.
 // Return false on fatal software error.
 bool NetworkSlaveThread::Work() {
-  logprintf(9, "Log: Starting network slave thread %d\n", thread_num_);
+  AddLog(LogSeverity::kDebug, "Starting network child thread");
 
   // Verify that we have a socket.
   int sock = sock_;
@@ -2325,10 +2320,8 @@ bool NetworkSlaveThread::Work() {
   int result = (local_page == 0);
 #endif
   if (result) {
-    logprintf(0,
-              "Process Error: net slave posix_memalign "
-              "returned %d (fail)\n",
-              result);
+    AddProcessError(absl::StrFormat(
+        "Net slave posix_memalign returned error code %d (fail)", result));
     status_ = false;
     return false;
   }
@@ -2355,10 +2348,10 @@ bool NetworkSlaveThread::Work() {
   // Clean up.
   CloseSocket(sock);
 
-  logprintf(9,
-            "Log: Completed %d: network slave thread status %d, "
-            "%d pages copied\n",
-            thread_num_, status_, pages_copied_);
+  AddLog(LogSeverity::kDebug,
+         absl::StrFormat(
+             "Finished network listen child thread, status %d, %d pages copied",
+             status_, pages_copied_));
   return true;
 }
 
