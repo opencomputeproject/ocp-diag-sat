@@ -343,9 +343,12 @@ class WorkerThread {
   // A worker thread can yield itself to give up CPU until it's scheduled again
   bool YieldSelf();
 
-  void AddLog(ocpdiag::results::LogSeverity severity, string message);
+  void AddLog(ocpdiag::results::LogSeverity severity, const string &message);
 
-  void AddProcessError(string message);
+  void AddProcessError(const string &message);
+
+  void AddDiagnosis(const string &verdict, ocpdiag::results::DiagnosisType type,
+                    const string &message);
 
  protected:
   // General state variables that all subclasses need.
@@ -388,12 +391,14 @@ class FileThread : public WorkerThread {
  public:
   FileThread();
   // Set filename to use for file IO.
-  virtual void SetFile(const char *filename_init);
+  virtual void SetFile(const string &filename_init);
   virtual bool Work();
 
   // Calculate worker thread specific bandwidth.
   virtual float GetDeviceCopiedData() { return GetCopiedData() * 2; }
   virtual float GetMemoryCopiedData();
+
+  string GetThreadTypeName() { return "File IO Thread"; }
 
  protected:
   // Record of where these pages were sourced from, and what
@@ -442,7 +447,6 @@ class FileThread : public WorkerThread {
   struct PageRec *page_recs_;  // Array of page records.
   int crc_page_;               // Page currently being CRC checked.
   string filename_;            // Name of file to access.
-  string devicename_;          // Name of device file is on.
 
   bool page_io_;      // Use page pool for IO.
   void *local_page_;  // malloc'd page fon non-pool IO.

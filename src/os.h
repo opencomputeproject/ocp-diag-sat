@@ -104,18 +104,14 @@ class OsLayer {
   // Returns the HD device that contains this file.
   virtual string FindFileDevice(string filename);
 
-  // Report errors. This implementation is mandatory.
-  // This will output a machine readable line regarding the error.
-  virtual bool ErrorReport(const char *part, const char *symptom, int count);
-
   // Flushes page cache. Used to circumvent the page cache when doing disk
   // I/O.  This will be a NOP until ActivateFlushPageCache() is called, which
   // is typically done when opening a file with O_DIRECT fails.
   // Returns false on error, true on success or NOP.
-  // Subclasses may implement this in machine specific ways..
-  virtual bool FlushPageCache(void);
+  // Subclasses may implement this in machine specific ways.
+  virtual bool FlushPageCache(ocpdiag::results::TestStep &test_step);
   // Enable FlushPageCache() to actually do the flush instead of being a NOP.
-  virtual void ActivateFlushPageCache(void);
+  virtual void ActivateFlushPageCache(ocpdiag::results::TestStep &test_step);
 
   // Flushes cacheline. Used to distinguish read or write errors.
   // Subclasses may implement this in machine specific ways..
@@ -293,8 +289,10 @@ class OsLayer {
 
   // Prepares the memory for use. You must call this
   // before using test memory, and after you are done.
-  virtual void *PrepareTestMem(uint64 offset, uint64 length);
-  virtual void ReleaseTestMem(void *addr, uint64 offset, uint64 length);
+  virtual void *PrepareTestMem(uint64 offset, uint64 length,
+                               ocpdiag::results::TestStep &test_step);
+  virtual void ReleaseTestMem(void *addr, uint64 offset, uint64 length,
+                              ocpdiag::results::TestStep &test_step);
 
   // Returns 32 for 32-bit, 64 for 64-bit.
   virtual int AddressMode();

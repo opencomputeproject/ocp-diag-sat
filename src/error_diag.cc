@@ -172,7 +172,7 @@ int ErrorDiag::AddMiscompareError(string dimm_string, uint64 addr, int count) {
   error->severity_ = SAT_ERROR_FATAL;
   error->addr_ = addr;
   dimm_device->AddErrorInstance(error);
-  os_->ErrorReport(dimm_string.c_str(), "miscompare", count);
+  // os_->ErrorReport(dimm_string.c_str(), "miscompare", count);
   return 1;
 }
 
@@ -236,7 +236,7 @@ int ErrorDiag::AddHDDMiscompareError(string devicename, int block, int offset,
 
   // HDD error was not masked by bad DIMMs: report bad HDD.
   if (!mask_hdd_error) {
-    os_->ErrorReport(devicename.c_str(), "miscompare", 1);
+    // os_->ErrorReport(devicename.c_str(), "miscompare", 1);
     error->severity_ = SAT_ERROR_FATAL;
     return 1;
   }
@@ -292,7 +292,7 @@ int ErrorDiag::AddHDDSectorTagError(string devicename, int block, int offset,
 
   // HDD error was not masked by bad DIMMs: report bad HDD.
   if (!mask_hdd_error) {
-    os_->ErrorReport(devicename.c_str(), "sector", 1);
+    // os_->ErrorReport(devicename.c_str(), "sector", 1);
     error->severity_ = SAT_ERROR_FATAL;
     return 1;
   }
