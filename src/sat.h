@@ -32,13 +32,17 @@ constexpr char kFileWriteFailVerdict[] = "sat-file-write-fail";
 constexpr char kFileReadFailVerdict[] = "sat-file-read-fail";
 constexpr char kHddSectorTagFailVerdict[] = "sat-hdd-sector-tag-fail";
 constexpr char kHddMiscompareFailVerdict[] = "sat-hdd-crc-miscompare-fail";
-constexpr char kGeneralMiscompareFailVerdict[] = "sat-general-crc-miscompare-fail";
+constexpr char kGeneralMiscompareFailVerdict[] =
+    "sat-general-crc-miscompare-fail";
 
 constexpr char kDeviceSizeZeroFailVerdict[] = "sat-device-size-zero-fail";
 constexpr char kDiskPatternMismatchFailVerdict[] = "sat-disk-pattern-mismatch";
-constexpr char kDiskAsyncOperationTimeoutFailVerdict[] = "sat-disk-async-operation-timeout-fail";
+constexpr char kDiskAsyncOperationTimeoutFailVerdict[] =
+    "sat-disk-async-operation-timeout-fail";
 constexpr char kDiskUnknownFailVerdict[] = "sat-disk-unknown-error-fail";
 constexpr char kDiskLowLevelIOFailVerdict[] = "sat-disk-low-level-io-fail";
+
+constexpr char kCacheCoherencyFailVerdict[] = "sat-cache-coherency-fail";
 
 // SAT stress test class.
 class Sat {

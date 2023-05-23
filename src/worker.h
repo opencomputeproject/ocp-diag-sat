@@ -622,6 +622,8 @@ class CpuCacheCoherencyThread : public WorkerThread {
                           int cc_inc_count_);
   virtual bool Work();
 
+  string GetThreadTypeName() { return "CPU Cache Coherency Thread"; }
+
  protected:
   // Used by the simple random number generator as a shift feedback;
   // this polynomial (x^64 + x^63 + x^61 + x^60 + 1) will produce a
