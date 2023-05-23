@@ -1402,7 +1402,7 @@ bool CheckThread::Work() {
   bool result = true;
   int64 loops = 0;
 
-  logprintf(9, "Log: Starting Check thread %d\n", thread_num_);
+  AddLog(LogSeverity::kDebug, "Starting Check thread");
 
   // We want to check all the pages, and
   // stop when there aren't any left.
@@ -1410,9 +1410,7 @@ bool CheckThread::Work() {
     result = result && sat_->GetValid(&pe, *test_step_);
     if (!result) {
       if (IsReadyToRunNoPause())
-        logprintf(0,
-                  "Process Error: check_thread failed to pop pages, "
-                  "bailing\n");
+        AddProcessError("check thread failed to pop pages");
       else
         result = true;
       break;
@@ -1428,9 +1426,7 @@ bool CheckThread::Work() {
     else
       result = result && sat_->PutEmpty(&pe, *test_step_);
     if (!result) {
-      logprintf(0,
-                "Process Error: check_thread failed to push pages, "
-                "bailing\n");
+      AddProcessError("check thread failed to push pages");
       break;
     }
     loops++;
@@ -1438,8 +1434,10 @@ bool CheckThread::Work() {
 
   pages_copied_ = loops;
   status_ = result;
-  logprintf(9, "Log: Completed %d: Check thread. Status %d, %d pages checked\n",
-            thread_num_, status_, pages_copied_);
+  AddLog(
+      LogSeverity::kDebug,
+      absl::StrFormat("Check thread completed with status %d, %d pages copied",
+                      status_, pages_copied_));
   return result;
 }
 
