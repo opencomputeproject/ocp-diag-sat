@@ -47,7 +47,6 @@
 // This file must work with autoconf on its public version,
 // so these includes are correct.
 #include "absl/strings/str_format.h"
-#include "error_diag.h"  // NOLINT
 #include "ocpdiag/core/results/data_model/input_model.h"
 #include "os.h"        // NOLINT
 #include "pattern.h"   // NOLINT

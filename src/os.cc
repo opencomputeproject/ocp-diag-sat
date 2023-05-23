@@ -39,7 +39,6 @@
 // so these includes are correct.
 #include "absl/strings/str_format.h"
 #include "clock.h"
-#include "error_diag.h"
 #include "ocpdiag/core/results/data_model/input_model.h"
 #include "ocpdiag/core/results/test_step.h"
 #include "sattypes.h"
