@@ -15,6 +15,7 @@
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
+#include "ocpdiag/core/results/test_step.h"
 #include "os.h"
 #include "pattern.h"
 #include "queue.h"  // Using page_entry struct.
@@ -28,21 +29,23 @@ class FineLockPEQueue {
   ~FineLockPEQueue();
 
   // Put and get functions for page entries.
-  bool GetEmpty(struct page_entry *pe);
-  bool GetValid(struct page_entry *pe);
+  bool GetEmpty(struct page_entry *pe, ocpdiag::results::TestStep &test_step);
+  bool GetValid(struct page_entry *pe, ocpdiag::results::TestStep &test_step);
   bool PutEmpty(struct page_entry *pe);
   bool PutValid(struct page_entry *pe);
 
   // Put and get functions for page entries, selecting on tags.
-  bool GetEmpty(struct page_entry *pe, int32 tag);
-  bool GetValid(struct page_entry *pe, int32 tag);
+  bool GetEmpty(struct page_entry *pe, int32 tag,
+                ocpdiag::results::TestStep &test_step);
+  bool GetValid(struct page_entry *pe, int32 tag,
+                ocpdiag::results::TestStep &test_step);
 
-  bool QueueAnalysis();
+  bool QueueAnalysis(ocpdiag::results::TestStep &test_step);
   bool GetPageFromPhysical(uint64 paddr, struct page_entry *pe);
 
  private:
   // Not that much blocking random number generator.
-  uint64 GetRandom64();
+  uint64 GetRandom64(ocpdiag::results::TestStep &test_step);
   uint64 GetRandom64FromSlot(int slot);
 
   // Helper function to check index range, returns true if index is valid.
@@ -62,13 +65,15 @@ class FineLockPEQueue {
   // Helper function to get a random page entry with given predicate,
   // ie, page_is_valid() or page_is_empty() as defined above.
   bool GetRandomWithPredicate(struct page_entry *pe,
-                              bool (*pred_func)(struct page_entry *));
+                              bool (*pred_func)(struct page_entry *),
+                              ocpdiag::results::TestStep &test_step);
 
   // Helper function to get a random page entry with given predicate,
   // ie, page_is_valid() or page_is_empty() as defined above.
   bool GetRandomWithPredicateTag(struct page_entry *pe,
                                  bool (*pred_func)(struct page_entry *),
-                                 int32 tag);
+                                 int32 tag,
+                                 ocpdiag::results::TestStep &test_step);
 
   // Used to make a linear congruential path through the queue.
   int64 getA(int64 m);

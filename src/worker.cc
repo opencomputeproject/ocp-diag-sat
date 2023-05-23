@@ -48,6 +48,8 @@
 // so these includes are correct.
 #include "absl/strings/str_format.h"
 #include "ocpdiag/core/results/data_model/input_model.h"
+#include "ocpdiag/core/results/measurement_series.h"
+#include "ocpdiag/core/results/test_step.h"
 #include "os.h"        // NOLINT
 #include "pattern.h"   // NOLINT
 #include "queue.h"     // NOLINT

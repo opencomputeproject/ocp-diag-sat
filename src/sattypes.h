@@ -224,4 +224,25 @@ static const int kSatPageSize = (1024LL * 1024LL);
 static const int kCacheLineSize = 64;
 static const uint16_t kNetworkPort = 19996;
 
+constexpr char kProcessError[] = "sat-process-error";
+constexpr char kMemoryCopyFailVerdict[] = "sat-memory-copy-fail";
+
+constexpr char kFileWriteFailVerdict[] = "sat-file-write-fail";
+constexpr char kFileReadFailVerdict[] = "sat-file-read-fail";
+constexpr char kHddSectorTagFailVerdict[] = "sat-hdd-sector-tag-fail";
+constexpr char kHddMiscompareFailVerdict[] = "sat-hdd-crc-miscompare-fail";
+constexpr char kGeneralMiscompareFailVerdict[] =
+    "sat-general-crc-miscompare-fail";
+
+constexpr char kDeviceSizeZeroFailVerdict[] = "sat-device-size-zero-fail";
+constexpr char kDiskPatternMismatchFailVerdict[] = "sat-disk-pattern-mismatch";
+constexpr char kDiskAsyncOperationTimeoutFailVerdict[] =
+    "sat-disk-async-operation-timeout-fail";
+constexpr char kDiskUnknownFailVerdict[] = "sat-disk-unknown-error-fail";
+constexpr char kDiskLowLevelIOFailVerdict[] = "sat-disk-low-level-io-fail";
+
+constexpr char kCacheCoherencyFailVerdict[] = "sat-cache-coherency-fail";
+constexpr char kCpuFrequencyTooLowFailVerdict[] =
+    "sat-cpu-frequency-too-low-fail";
+
 #endif  // STRESSAPPTEST_SATTYPES_H_

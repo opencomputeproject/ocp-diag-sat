@@ -236,7 +236,7 @@ bool Sat::GetValid(struct page_entry *pe, int32 tag, TestStep &test_step) {
   bool result = false;
   // Get valid page depending on implementation.
   if (pe_q_implementation_ == SAT_FINELOCK)
-    result = finelock_q_->GetValid(pe, tag);
+    result = finelock_q_->GetValid(pe, tag, test_step);
   else if (pe_q_implementation_ == SAT_ONELOCK)
     result = valid_->PopRandom(pe);
 
@@ -277,7 +277,7 @@ bool Sat::GetEmpty(struct page_entry *pe, int32 tag, TestStep &test_step) {
   bool result = false;
   // Get empty page depending on implementation.
   if (pe_q_implementation_ == SAT_FINELOCK)
-    result = finelock_q_->GetEmpty(pe, tag);
+    result = finelock_q_->GetEmpty(pe, tag, test_step);
   else if (pe_q_implementation_ == SAT_ONELOCK)
     result = empty_->PopRandom(pe);
 
@@ -1629,7 +1629,7 @@ void Sat::JoinThreads(TestStep &test_step) {
   }
   ReleaseWorkerLock();
 
-  QueueStats();
+  QueueStats(test_step);
 
   {
     TestStep check_step("Run Post-Test Memory Check Threads", *test_run_);
@@ -1724,7 +1724,9 @@ void Sat::JoinThreads(TestStep &test_step) {
 }
 
 // Print queuing information.
-void Sat::QueueStats() { finelock_q_->QueueAnalysis(); }
+void Sat::QueueStats(TestStep &test_step) {
+  finelock_q_->QueueAnalysis(test_step);
+}
 
 void Sat::AnalysisAllStats(TestStep &test_step) {
   double max_runtime_sec = 0.;

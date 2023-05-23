@@ -11,7 +11,19 @@
 // so these includes are correct.
 #include "finelock_queue.h"
 
+#include "absl/strings/str_format.h"
+#include "ocpdiag/core/results/data_model/input_model.h"
+#include "ocpdiag/core/results/measurement_series.h"
+#include "ocpdiag/core/results/test_step.h"
 #include "os.h"
+
+using ::ocpdiag::results::Error;
+using ::ocpdiag::results::Log;
+using ::ocpdiag::results::LogSeverity;
+using ::ocpdiag::results::MeasurementSeries;
+using ::ocpdiag::results::MeasurementSeriesElement;
+using ::ocpdiag::results::MeasurementSeriesStart;
+using ::ocpdiag::results::TestStep;
 
 // Page entry queue implementation follows.
 // Push and Get functions are analogous to lock and unlock operations on a given
@@ -145,7 +157,7 @@ FineLockPEQueue::~FineLockPEQueue() {
   }
 }
 
-bool FineLockPEQueue::QueueAnalysis() {
+bool FineLockPEQueue::QueueAnalysis(TestStep &test_step) {
   const char *measurement = "Error";
   uint64 buckets[32];
 
@@ -170,11 +182,15 @@ bool FineLockPEQueue::QueueAnalysis() {
     buckets[b]++;
   }
 
-  logprintf(12, "Log:  %s histogram\n", measurement);
+  MeasurementSeries queue_stats(
+      MeasurementSeriesStart{
+          .name = absl::StrFormat("Queue Analysis: %s", measurement)},
+      test_step);
   for (int b = 0; b < 32; b++) {
-    if (buckets[b])
-      logprintf(12, "Log:  %12d - %12d: %12d\n", ((1 << b) >> 1), 1 << b,
-                buckets[b]);
+    if (buckets[b]) {
+      queue_stats.AddElement(
+          MeasurementSeriesElement{.value = static_cast<double>(buckets[b])});
+    }
   }
 
   return true;
@@ -205,7 +221,7 @@ uint64 FineLockPEQueue::GetRandom64FromSlot(int slot) {
 
 // Get a random number, we have 4 generators to choose from so hopefully we
 // won't be blocking on this.
-uint64 FineLockPEQueue::GetRandom64() {
+uint64 FineLockPEQueue::GetRandom64(TestStep &test_step) {
   // Try each available slot.
   for (int i = 0; i < 4; i++) {
     if (pthread_mutex_trylock(&(randlocks_[i])) == 0) {
@@ -222,7 +238,8 @@ uint64 FineLockPEQueue::GetRandom64() {
     return result;
   }
 
-  logprintf(0, "Process Error: Could not acquire random lock.\n");
+  test_step.AddError(Error{.symptom = kProcessError,
+                           .message = "Could not acquire random lock"});
   sat_assert(0);
   return 0;
 }
@@ -235,11 +252,12 @@ uint64 FineLockPEQueue::GetRandom64() {
 //
 // Returns true on success, false on failure.
 bool FineLockPEQueue::GetRandomWithPredicateTag(
-    struct page_entry *pe, bool (*pred_func)(struct page_entry *), int32 tag) {
+    struct page_entry *pe, bool (*pred_func)(struct page_entry *), int32 tag,
+    TestStep &test_step) {
   if (!pe || !q_size_) return false;
 
   // Randomly index into page entry array.
-  uint64 first_try = GetRandom64() % q_size_;
+  uint64 first_try = GetRandom64(test_step) % q_size_;
   uint64 next_try = 1;
 
   // Traverse through array until finding a page meeting given predicate.
@@ -289,31 +307,34 @@ bool FineLockPEQueue::GetRandomWithPredicateTag(
 
 // Without tag hint.
 bool FineLockPEQueue::GetRandomWithPredicate(
-    struct page_entry *pe, bool (*pred_func)(struct page_entry *)) {
-  return GetRandomWithPredicateTag(pe, pred_func, kDontCareTag);
+    struct page_entry *pe, bool (*pred_func)(struct page_entry *),
+    TestStep &test_step) {
+  return GetRandomWithPredicateTag(pe, pred_func, kDontCareTag, test_step);
 }
 
 // GetValid() randomly finds a valid page, locks it and returns page entry by
 // pointer.
 //
 // Returns true on success, false on failure.
-bool FineLockPEQueue::GetValid(struct page_entry *pe) {
-  return GetRandomWithPredicate(pe, page_is_valid);
+bool FineLockPEQueue::GetValid(struct page_entry *pe, TestStep &test_step) {
+  return GetRandomWithPredicate(pe, page_is_valid, test_step);
 }
 
-bool FineLockPEQueue::GetValid(struct page_entry *pe, int32 mask) {
-  return GetRandomWithPredicateTag(pe, page_is_valid, mask);
+bool FineLockPEQueue::GetValid(struct page_entry *pe, int32 mask,
+                               TestStep &test_step) {
+  return GetRandomWithPredicateTag(pe, page_is_valid, mask, test_step);
 }
 
 // GetEmpty() randomly finds an empty page, locks it and returns page entry by
 // pointer.
 //
 // Returns true on success, false on failure.
-bool FineLockPEQueue::GetEmpty(struct page_entry *pe, int32 mask) {
-  return GetRandomWithPredicateTag(pe, page_is_empty, mask);
+bool FineLockPEQueue::GetEmpty(struct page_entry *pe, int32 mask,
+                               TestStep &test_step) {
+  return GetRandomWithPredicateTag(pe, page_is_empty, mask, test_step);
 }
-bool FineLockPEQueue::GetEmpty(struct page_entry *pe) {
-  return GetRandomWithPredicate(pe, page_is_empty);
+bool FineLockPEQueue::GetEmpty(struct page_entry *pe, TestStep &test_step) {
+  return GetRandomWithPredicate(pe, page_is_empty, test_step);
 }
 
 // PutEmpty puts an empty page back into the queue, making it available by
