@@ -1359,15 +1359,17 @@ void Sat::InitializeThreads() {
   if (invert_threads_ > 0) thread_test_steps_.push_back(std::move(invert_step));
 
   // Disk stress threads.
-  // TODO(b/274523023) Populate disk stress step
   std::unique_ptr<TestStep> disk_step;
   if (disk_threads_ > 0) {
     disk_step =
         std::make_unique<TestStep>("Run Disk Stress Threads", *test_run_);
+    disk_step->AddLog(Log{
+        .severity = LogSeverity::kDebug,
+        .message = "Starting disk stress threads",
+    });
   }
   WorkerVector *disk_vector = new WorkerVector();
   WorkerVector *random_vector = new WorkerVector();
-  logprintf(12, "Log: Starting disk stress threads\n");
   for (int i = 0; i < disk_threads_; i++) {
     // Creating write threads
     DiskThread *thread = new DiskThread(blocktables_[i]);
@@ -1380,7 +1382,10 @@ void Sat::InitializeThreads() {
                               non_destructive_)) {
       disk_vector->insert(disk_vector->end(), thread);
     } else {
-      logprintf(12, "Log: DiskThread::SetParameters() failed\n");
+      disk_step->AddLog(Log{
+          .severity = LogSeverity::kDebug,
+          .message = "Failed to set disk thread parameters",
+      });
       delete thread;
     }
 
@@ -1396,7 +1401,10 @@ void Sat::InitializeThreads() {
                                  write_threshold_, non_destructive_)) {
         random_vector->insert(random_vector->end(), rthread);
       } else {
-        logprintf(12, "Log: RandomDiskThread::SetParameters() failed\n");
+        disk_step->AddLog(Log{
+            .severity = LogSeverity::kDebug,
+            .message = "Failed to set random disk thread parameters",
+        });
         delete rthread;
       }
     }

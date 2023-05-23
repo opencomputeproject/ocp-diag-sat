@@ -30,6 +30,7 @@
 // so these includes are correct.
 #include "disk_blocks.h"
 #include "ocpdiag/core/results/data_model/input_model.h"
+#include "ocpdiag/core/results/measurement_series.h"
 #include "ocpdiag/core/results/test_step.h"
 #include "queue.h"
 #include "sattypes.h"
@@ -665,6 +666,8 @@ class DiskThread : public WorkerThread {
 
   enum IoOp { ASYNC_IO_READ = 0, ASYNC_IO_WRITE = 1 };
 
+  string GetThreadTypeName() { return "Disk Test Thread"; }
+
   virtual bool OpenDevice(int *pfile);
   virtual bool CloseDevice(int fd);
 
@@ -721,6 +724,11 @@ class DiskThread : public WorkerThread {
   string device_name_;    // Name of device file to access.
   int64 device_sectors_;  // Number of sectors on the device.
 
+  std::unique_ptr<ocpdiag::results::MeasurementSeries>
+      read_times_;  // Measurement series for storing disk read times
+  std::unique_ptr<ocpdiag::results::MeasurementSeries>
+      write_times_;  // Measurement series for storing disk write times
+
   std::queue<BlockData *> in_flight_sectors_;  // Queue of sectors written but
                                                // not verified.
   void *block_buffer_;  // Pointer to aligned block buffer.
@@ -744,6 +752,8 @@ class RandomDiskThread : public DiskThread {
   virtual bool DoWork(int fd);
 
  protected:
+  string GetThreadTypeName() { return "Random Disk Test Thread"; }
+
   DISALLOW_COPY_AND_ASSIGN(RandomDiskThread);
 };
 
