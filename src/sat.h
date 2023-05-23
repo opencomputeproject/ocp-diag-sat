@@ -66,14 +66,6 @@ class Sat {
   // This must be called from a single-threaded program.
   bool Run();
 
-  // Pretty print result summary.
-  // Called after Run().
-  // Return value is success or failure of the SAT run, *not* of this function!
-  bool PrintResults();
-
-  // Pretty print version info.
-  bool PrintVersion();
-
   // Pretty print help.
   virtual void PrintHelp();
 
@@ -138,15 +130,15 @@ class Sat {
   bool InitializePages();
 
   // Start up worker threads.
-  virtual void InitializeThreads();
+  virtual void InitializeThreads(ocpdiag::results::TestStep &test_step);
   // Spawn worker threads.
-  void SpawnThreads();
+  void SpawnThreads(ocpdiag::results::TestStep &test_step);
   // Reap worker threads.
-  void JoinThreads();
+  void JoinThreads(ocpdiag::results::TestStep &test_step);
   // Run bandwidth and error analysis.
   virtual void RunAnalysis();
   // Delete worker threads.
-  void DeleteThreads();
+  void DeleteThreads(ocpdiag::results::TestStep &test_step);
 
   // Return the number of cpus in the system.
   int CpuCount();
