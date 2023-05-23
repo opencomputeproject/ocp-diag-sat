@@ -43,6 +43,7 @@ constexpr char kDiskUnknownFailVerdict[] = "sat-disk-unknown-error-fail";
 constexpr char kDiskLowLevelIOFailVerdict[] = "sat-disk-low-level-io-fail";
 
 constexpr char kCacheCoherencyFailVerdict[] = "sat-cache-coherency-fail";
+constexpr char kCpuFrequencyTooLowFailVerdict[] = "sat-cpu-frequency-too-low-fail";
 
 // SAT stress test class.
 class Sat {

@@ -3381,10 +3381,12 @@ bool CpuFreqThread::ComputeDelta(CpuDataType *current, CpuDataType *previous,
   // Loop through the msrs.
   for (int msr = 0; msr < kMsrLast; msr++) {
     if (previous->msrs[msr] > current->msrs[msr]) {
-      logprintf(0,
-                "Log: Register %s went backwards 0x%llx to 0x%llx "
-                "skipping interval\n",
-                kCpuRegisters[msr], previous->msrs[msr], current->msrs[msr]);
+      AddLog(
+          LogSeverity::kWarning,
+          absl::StrFormat(
+              "Register %s went backwards 0x%llx to 0x%llx skipping interval",
+              kCpuRegisters[msr].name, previous->msrs[msr],
+              current->msrs[msr]));
       return false;
     } else {
       delta->msrs[msr] = current->msrs[msr] - previous->msrs[msr];
@@ -3393,7 +3395,7 @@ bool CpuFreqThread::ComputeDelta(CpuDataType *current, CpuDataType *previous,
 
   // Check for TSC < 1 Mcycles over interval.
   if (delta->msrs[kMsrTsc] < (1000 * 1000)) {
-    logprintf(0, "Log: Insanely slow TSC rate, TSC stops in idle?\n");
+    AddLog(LogSeverity::kWarning, "Insanely slow TSC rate, TSC stops in idle?");
     return false;
   }
   timersub(&current->tv, &previous->tv, &delta->tv);
@@ -3425,7 +3427,7 @@ bool CpuFreqThread::ComputeFrequency(CpuDataType *current,
 bool CpuFreqThread::Work() {
   cpu_set_t cpuset;
   if (!AvailableCpus(&cpuset)) {
-    logprintf(0, "Process Error: Cannot get information about the cpus.\n");
+    AddProcessError("Cannot get information about the cpus.");
     return false;
   }
 
@@ -3442,6 +3444,20 @@ bool CpuFreqThread::Work() {
   vector<CpuDataType> data[2];
   data[0].resize(num_cpus_);
   data[1].resize(num_cpus_);
+
+  vector<std::unique_ptr<MeasurementSeries>> cpu_freqs;
+  for (int cpu = 0; cpu < num_cpus_; cpu++) {
+    cpu_freqs.push_back(std::make_unique<MeasurementSeries>(
+        MeasurementSeriesStart{
+            .name = absl::StrFormat("CPU Core %d Frequency", cpu),
+            .unit = "MHz",
+            .validators = {Validator{
+                .type = ValidatorType::kGreaterThanOrEqual,
+                .value = {static_cast<double>(freq_threshold_)}}},
+        },
+        *test_step_));
+  }
+
   while (IsReadyToRun(&paused)) {
     if (paused) {
       // Reset the intervals and restart logic after the pause.
@@ -3458,7 +3474,8 @@ bool CpuFreqThread::Work() {
     for (int cpu = 0; cpu < num_cpus_; cpu++) {
       if (CPU_ISSET(cpu, &cpuset)) {
         if (!GetMsrs(cpu, &data[curr][cpu])) {
-          logprintf(0, "Failed to get msrs on cpu %d.\n", cpu);
+          AddLog(LogSeverity::kWarning,
+                 absl::StrFormat("Failed to get msrs on CPU %d", cpu));
           valid = false;
           break;
         }
@@ -3480,18 +3497,19 @@ bool CpuFreqThread::Work() {
           if (!ComputeFrequency(&data[curr][cpu], &data[prev][cpu], &freq)) {
             // Reset the number of collected intervals since an unknown
             // error occurred.
-            logprintf(0, "Log: Cannot get frequency of cpu %d.\n", cpu);
+            AddLog(LogSeverity::kWarning,
+                   absl::StrFormat("Cannot get frequency of CPU %d", cpu));
             num_intervals = 0;
             break;
           }
-          logprintf(15, "Cpu %d Freq %d\n", cpu, freq);
+          cpu_freqs[cpu]->AddElement(
+              MeasurementSeriesElement{.value = static_cast<double>(freq)});
           if (freq < freq_threshold_) {
             errorcount_++;
             pass = false;
-            logprintf(0,
-                      "Log: Cpu %d frequency is too low, frequency %d MHz "
-                      "threshold %d MHz.\n",
-                      cpu, freq, freq_threshold_);
+            AddDiagnosis(
+                kCpuFrequencyTooLowFailVerdict, DiagnosisType::kFail,
+                absl::StrFormat("CPU frequency for core %d is too low", cpu));
           }
         }
       }
