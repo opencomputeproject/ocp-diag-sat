@@ -1336,13 +1336,13 @@ void Sat::InitializeThreads() {
   if (check_threads_ > 0) thread_test_steps_.push_back(std::move(check_step));
 
   // Memory invert threads.
-  // TODO(b/274523085) Populate memory invert step
   std::unique_ptr<TestStep> invert_step;
   if (invert_threads_ > 0) {
     invert_step =
         std::make_unique<TestStep>("Run Memory Invert Threads", *test_run_);
+    invert_step->AddLog(Log{.severity = LogSeverity::kDebug,
+                            .message = "Starting memory invert threads"});
   }
-  logprintf(12, "Log: Starting invert threads\n");
   WorkerVector *invert_vector = new WorkerVector();
   for (int i = 0; i < invert_threads_; i++) {
     InvertThread *thread = new InvertThread();

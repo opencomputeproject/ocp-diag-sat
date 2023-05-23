@@ -559,6 +559,8 @@ class InvertThread : public WorkerThread {
   // Calculate worker thread specific bandwidth.
   virtual float GetMemoryCopiedData() { return GetCopiedData() * 4; }
 
+  string GetThreadTypeName() { return "Memory Page Invert Thread"; }
+
  private:
   virtual int InvertPageUp(struct page_entry *srcpe);
   virtual int InvertPageDown(struct page_entry *srcpe);
