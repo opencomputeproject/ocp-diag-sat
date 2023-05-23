@@ -760,104 +760,8 @@ void OsLayer::ReleaseTestMem(void *addr, uint64 offset, uint64 length,
   }
 }
 
-// Open a PCI bus-dev-func as a file and return its file descriptor.
-// Error is indicated by return value less than zero.
-int OsLayer::PciOpen(int bus, int device, int function) {
-  char dev_file[256];
-
-  snprintf(dev_file, sizeof(dev_file), "/proc/bus/pci/%02x/%02x.%x", bus,
-           device, function);
-
-  int fd = open(dev_file, O_RDWR);
-  if (fd == -1) {
-    logprintf(0,
-              "Process Error: Unable to open PCI bus %d, device %d, "
-              "function %d (errno %d).\n",
-              bus, device, function, errno);
-    return -1;
-  }
-
-  return fd;
-}
-
-// Read and write functions to access PCI config.
-uint32 OsLayer::PciRead(int fd, uint32 offset, int width) {
-  // Strict aliasing rules lawyers will cause data corruption
-  // on cast pointers in some gccs.
-  union {
-    uint32 l32;
-    uint16 l16;
-    uint8 l8;
-  } datacast;
-  datacast.l32 = 0;
-  uint32 size = width / 8;
-
-  sat_assert((width == 32) || (width == 16) || (width == 8));
-  sat_assert(offset <= (256 - size));
-
-  if (lseek(fd, offset, SEEK_SET) < 0) {
-    logprintf(0, "Process Error: Can't seek %x\n", offset);
-    return 0;
-  }
-  if (read(fd, &datacast, size) != static_cast<ssize_t>(size)) {
-    logprintf(0, "Process Error: Can't read %x\n", offset);
-    return 0;
-  }
-
-  // Extract the data.
-  switch (width) {
-    case 8:
-      sat_assert(&(datacast.l8) == reinterpret_cast<uint8 *>(&datacast));
-      return datacast.l8;
-    case 16:
-      sat_assert(&(datacast.l16) == reinterpret_cast<uint16 *>(&datacast));
-      return datacast.l16;
-    case 32:
-      return datacast.l32;
-  }
-  return 0;
-}
-
-void OsLayer::PciWrite(int fd, uint32 offset, uint32 value, int width) {
-  // Strict aliasing rules lawyers will cause data corruption
-  // on cast pointers in some gccs.
-  union {
-    uint32 l32;
-    uint16 l16;
-    uint8 l8;
-  } datacast;
-  datacast.l32 = 0;
-  uint32 size = width / 8;
-
-  sat_assert((width == 32) || (width == 16) || (width == 8));
-  sat_assert(offset <= (256 - size));
-
-  // Cram the data into the right alignment.
-  switch (width) {
-    case 8:
-      sat_assert(&(datacast.l8) == reinterpret_cast<uint8 *>(&datacast));
-      datacast.l8 = value;
-    case 16:
-      sat_assert(&(datacast.l16) == reinterpret_cast<uint16 *>(&datacast));
-      datacast.l16 = value;
-    case 32:
-      datacast.l32 = value;
-  }
-
-  if (lseek(fd, offset, SEEK_SET) < 0) {
-    logprintf(0, "Process Error: Can't seek %x\n", offset);
-    return;
-  }
-  if (write(fd, &datacast, size) != static_cast<ssize_t>(size)) {
-    logprintf(0, "Process Error: Can't write %x to %x\n", datacast.l32, offset);
-    return;
-  }
-
-  return;
-}
-
 // Open dev msr.
-int OsLayer::OpenMSR(uint32 core, uint32 address) {
+int OsLayer::OpenMSR(uint32 core, uint32 address, TestStep &test_step) {
   char buf[256];
   snprintf(buf, sizeof(buf), "/dev/cpu/%d/msr", core);
   int fd = open(buf, O_RDWR);
@@ -866,36 +770,32 @@ int OsLayer::OpenMSR(uint32 core, uint32 address) {
   uint32 pos = lseek(fd, address, SEEK_SET);
   if (pos != address) {
     close(fd);
-    logprintf(5, "Log: can't seek to msr %x, cpu %d\n", address, core);
+    test_step.AddLog(Log{
+        .severity = LogSeverity::kWarning,
+        .message =
+            absl::StrFormat("Can't seek to msr %x, cpu %d", address, core),
+    });
     return -1;
   }
 
   return fd;
 }
 
-bool OsLayer::ReadMSR(uint32 core, uint32 address, uint64 *data) {
-  int fd = OpenMSR(core, address);
+bool OsLayer::ReadMSR(uint32 core, uint32 address, uint64 *data,
+                      TestStep &test_step) {
+  int fd = OpenMSR(core, address, test_step);
   if (fd < 0) return false;
 
-  // Read from the msr.
+  // Read from the msr.q
   bool res = (sizeof(*data) == read(fd, data, sizeof(*data)));
 
-  if (!res) logprintf(5, "Log: Failed to read msr %x core %d\n", address, core);
-
-  close(fd);
-
-  return res;
-}
-
-bool OsLayer::WriteMSR(uint32 core, uint32 address, uint64 *data) {
-  int fd = OpenMSR(core, address);
-  if (fd < 0) return false;
-
-  // Write to the msr
-  bool res = (sizeof(*data) == write(fd, data, sizeof(*data)));
-
-  if (!res)
-    logprintf(5, "Log: Failed to write msr %x core %d\n", address, core);
+  if (!res) {
+    test_step.AddLog(Log{
+        .severity = LogSeverity::kWarning,
+        .message =
+            absl::StrFormat("Failed to read msr %x core %d", address, core),
+    });
+  }
 
   close(fd);
 

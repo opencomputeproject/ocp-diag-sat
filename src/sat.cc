@@ -216,13 +216,7 @@ bool Sat::InitializePatterns(TestStep &setup_step) {
     });
     return false;
   }
-  if (!patternlist_->Initialize()) {
-    setup_step.AddError(Error{
-        .symptom = kProcessError,
-        .message = "Failed to initialize memory pattern list.",
-    });
-    return false;
-  }
+  if (!patternlist_->Initialize(setup_step)) return false;
   return true;
 }
 
@@ -238,7 +232,7 @@ bool Sat::GetValid(struct page_entry *pe, int32 tag, TestStep &test_step) {
   if (pe_q_implementation_ == SAT_FINELOCK)
     result = finelock_q_->GetValid(pe, tag, test_step);
   else if (pe_q_implementation_ == SAT_ONELOCK)
-    result = valid_->PopRandom(pe);
+    result = valid_->PopRandom(pe, test_step);
 
   if (result) {
     pe->addr =
@@ -279,7 +273,7 @@ bool Sat::GetEmpty(struct page_entry *pe, int32 tag, TestStep &test_step) {
   if (pe_q_implementation_ == SAT_FINELOCK)
     result = finelock_q_->GetEmpty(pe, tag, test_step);
   else if (pe_q_implementation_ == SAT_ONELOCK)
-    result = empty_->PopRandom(pe);
+    result = empty_->PopRandom(pe, test_step);
 
   if (result) {
     pe->addr =
@@ -610,11 +604,12 @@ bool Sat::Initialize() {
   Logger::GlobalLogger()->SetTimestampLogging(log_timestamps_);
   Logger::GlobalLogger()->StartThread();
 
+  if (!ValidateArgs()) return false;
+
   // TODO(b/273815895) Report DUT info
   test_run_->StartAndRegisterDutInfo(
       std::make_unique<ocpdiag::results::DutInfo>("place", "holder"));
 
-  // TODO(b/273823746) Populate setup and check env step
   auto setup_step =
       std::make_unique<TestStep>("Setup and Check Environment", *test_run_);
 
@@ -1027,11 +1022,17 @@ bool Sat::ParseArgs(int argc, const char **argv) {
       continue;
     }
 
+    // Set disk_pages_ if filesize or page size changed.
+    if (filesize !=
+        static_cast<uint64>(page_length_) * static_cast<uint64>(disk_pages_)) {
+      disk_pages_ = filesize / page_length_;
+      if (disk_pages_ == 0) disk_pages_ = 1;
+    }
+
     // Default:
     PrintHelp();
     if (strcmp(argv[i], "-h") && strcmp(argv[i], "--help")) {
       printf("\n Unknown argument %s\n", argv[i]);
-      bad_status();
       exit(1);
     }
     // Forget it, we printed the help, just bail.
@@ -1047,78 +1048,83 @@ bool Sat::ParseArgs(int argc, const char **argv) {
 
   // Set logfile flag.
   if (strcmp(logfilename_, "")) use_logfile_ = true;
+
+  cmdline_ = ocpdiag::results::CommandLineStringFromMainArgs(argc, argv);
+  cmdline_json_ = ocpdiag::results::ParameterJsonFromMainArgs(argc, argv);
+
+  return true;
+}
+
+bool Sat::ValidateArgs() {
   // Checks valid page length.
   if (page_length_ && !(page_length_ & (page_length_ - 1)) &&
       (page_length_ > 1023)) {
     // Prints if we have changed from default.
-    if (page_length_ != kSatPageSize)
-      logprintf(12, "Log: Updating page size to %d\n", page_length_);
+    if (page_length_ != kSatPageSize) {
+      test_run_->AddPreStartLog(Log{
+          .severity = LogSeverity::kDebug,
+          .message = absl::StrFormat("Updating page size to %d", page_length_),
+      });
+    }
   } else {
     // Revert to default page length.
-    logprintf(6,
-              "Process Error: "
-              "Invalid page size %d\n",
-              page_length_);
+    test_run_->AddPreStartError(Error{
+        .symptom = kProcessError,
+        .message = absl::StrFormat("Invalid page size %d", page_length_),
+    });
     page_length_ = kSatPageSize;
     return false;
-  }
-
-  // Set disk_pages_ if filesize or page size changed.
-  if (filesize !=
-      static_cast<uint64>(page_length_) * static_cast<uint64>(disk_pages_)) {
-    disk_pages_ = filesize / page_length_;
-    if (disk_pages_ == 0) disk_pages_ = 1;
   }
 
   // Validate memory channel parameters if supplied
   if (channels_.size()) {
     if (channels_.size() == 1) {
       channel_hash_ = 0;
-      logprintf(
-          7,
-          "Log: "
-          "Only one memory channel...deactivating interleave decoding.\n");
+      test_run_->AddPreStartLog(Log{
+          .severity = LogSeverity::kInfo,
+          .message =
+              "Only one memory channel...deactivating interleave decoding",
+      });
     } else if (channels_.size() > 2) {
-      logprintf(6,
-                "Process Error: "
-                "Triple-channel mode not yet supported... sorry.\n");
-      bad_status();
+      test_run_->AddPreStartError(Error{
+          .symptom = kProcessError,
+          .message = "Triple-channel mode not yet supported",
+      });
       return false;
     }
     for (uint i = 0; i < channels_.size(); i++)
       if (channels_[i].size() != channels_[0].size()) {
-        logprintf(6,
-                  "Process Error: "
-                  "Channels 0 and %d have a different count of dram modules.\n",
-                  i);
-        bad_status();
+        test_run_->AddPreStartError(Error{
+            .symptom = kProcessError,
+            .message = absl::StrFormat(
+                "Channels 0 and %d have a different count of dram modules", i),
+        });
         return false;
       }
     if (channels_[0].size() & (channels_[0].size() - 1)) {
-      logprintf(6,
-                "Process Error: "
-                "Amount of modules per memory channel is not a power of 2.\n");
-      bad_status();
+      test_run_->AddPreStartError(Error{
+          .symptom = kProcessError,
+          .message = "Amount of modules per memory channel is not a power of 2",
+      });
       return false;
     }
     if (channel_width_ < 16 || channel_width_ & (channel_width_ - 1)) {
-      logprintf(6,
-                "Process Error: "
-                "Channel width %d is invalid.\n",
-                channel_width_);
-      bad_status();
+      test_run_->AddPreStartError(Error{
+          .symptom = kProcessError,
+          .message =
+              absl::StrFormat("Channel width %d is invalid.\n", channel_width_),
+      });
       return false;
     }
     if (channel_width_ / channels_[0].size() < 8) {
-      logprintf(6, "Process Error: Chip width x%d must be x8 or greater.\n",
-                channel_width_ / channels_[0].size());
-      bad_status();
+      test_run_->AddPreStartError(Error{
+          .symptom = kProcessError,
+          .message = absl::StrFormat("Chip width x%d must be x8 or greater",
+                                     channel_width_ / channels_[0].size()),
+      });
       return false;
     }
   }
-
-  cmdline_ = ocpdiag::results::CommandLineStringFromMainArgs(argc, argv);
-  cmdline_json_ = ocpdiag::results::ParameterJsonFromMainArgs(argc, argv);
 
   return true;
 }
@@ -2014,7 +2020,7 @@ bool Sat::Run() {
                   seconds_remaining)});
       struct page_entry src;
       GetValid(&src, run_step);
-      src.pattern = patternlist_->GetPattern(0);
+      src.pattern = patternlist_->GetPattern(0, run_step);
       PutValid(&src, run_step);
       next_injection = NextOccurance(kInjectionFrequency, start, now);
     }

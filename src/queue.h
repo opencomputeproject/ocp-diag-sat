@@ -18,6 +18,7 @@
 
 // This file must work with autoconf on its public version,
 // so these includes are correct.
+#include "ocpdiag/core/results/test_step.h"
 #include "pattern.h"   // NOLINT
 #include "sattypes.h"  // NOLINT
 
@@ -59,7 +60,7 @@ class PageEntryQueue {
   // Push a page onto the list.
   int Push(struct page_entry *pe);
   // Pop a random page off of the list.
-  int PopRandom(struct page_entry *pe);
+  int PopRandom(struct page_entry *pe, ocpdiag::results::TestStep &test_step);
 
  private:
   struct page_entry *pages_;  // Where the pages are held.

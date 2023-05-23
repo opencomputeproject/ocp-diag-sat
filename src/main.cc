@@ -6,42 +6,29 @@
 
 // sat.cc : a stress test for stressful testing
 
+#include "ocpdiag/core/results/data_model/output_model.h"
 #include "sat.h"
 #include "sattypes.h"
 
 int main(int argc, const char **argv) {
   Sat *sat = SatFactory();
   if (sat == NULL) {
-    logprintf(0, "Process Error: failed to allocate Sat object\n");
+    std::cerr << "Process Error: failed to allocate Sat object";
     return 255;
   }
 
   if (!sat->ParseArgs(argc, argv)) {
-    logprintf(0, "Process Error: Sat::ParseArgs() failed\n");
-    sat->bad_status();
+    std::cerr << "Process Error: Sat::ParseArgs() failed";
+    return 1;
   } else if (!sat->Initialize()) {
-    logprintf(0, "Process Error: Sat::Initialize() failed\n");
-    sat->bad_status();
-  } else if (!sat->Run()) {
-    logprintf(0, "Process Error: Sat::Run() failed\n");
-    sat->bad_status();
-  }
-  if (!sat->Cleanup()) {
-    logprintf(0, "Process Error: Sat::Cleanup() failed\n");
-    sat->bad_status();
+    return 1;
   }
 
-  int retval;
-  if (sat->status() != 0) {
-    logprintf(0,
-              "Process Error: Fatal issue encountered. See above logs for "
-              "details.\n");
-    retval = 1;
-  } else if (sat->errors() != 0) {
-    retval = 1;
-  } else {
-    retval = 0;
-  }
+  sat->Run();
+  sat->Cleanup();
+
+  int retval = 0;
+  if (sat->status() == ocpdiag::results::TestResult::kFail) retval = 1;
 
   delete sat;
   return retval;
