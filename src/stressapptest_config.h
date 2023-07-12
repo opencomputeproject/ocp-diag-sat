@@ -203,10 +203,6 @@
 /* Defined if the target OS is Linux */
 #define STRESSAPPTEST_OS_LINUX /**/
 
-/* Timestamp when ./configure was executed */
-#define STRESSAPPTEST_TIMESTAMP \
-  "dthawkes @ dthawkes.c.googlers.com on Fri Feb  3 00:36:59 UTC 2023"
-
 /* Define to 1 if you can safely include both <sys/time.h> and <time.h>. */
 #define TIME_WITH_SYS_TIME 1
 
