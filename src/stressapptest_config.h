@@ -248,3 +248,6 @@
 /* Define to empty if the keyword `volatile' does not work. Warning: valid
    code using `volatile' can become incorrect without. Disable with care. */
 /* #undef volatile */
+
+// manual patches to make things compile at this point
+#define STRESSAPPTEST_TIMESTAMP "Wed Aug  9 02:49:41 PM IST 2023"
