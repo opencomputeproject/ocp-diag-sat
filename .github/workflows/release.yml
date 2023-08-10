@@ -1,0 +1,27 @@
+name: release
+
+# version tags are protected, this will only match the "main" branch
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    env:
+      USE_BAZEL_VERSION: 5.4.0
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/bazel-container
+      - name: build the x86_64 binary
+        run: |
+          bazel build //...
+      - name: publish release
+        uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            LICENSE
+            bazel-bin/src/ocpdiag_sat_x86_64

@@ -48,7 +48,7 @@ cc_library(
 )
 
 cc_binary(
-    name = "ocp_diag_sat_x86_64",
+    name = "ocpdiag_sat_x86_64",
     srcs = ["main.cc"],
     deps = [":sat_lib"],
     visibility = [],
