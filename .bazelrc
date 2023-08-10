@@ -13,3 +13,10 @@ build --cxxopt=-DCHECKOPTS
 build --cxxopt=-O3
 build --cxxopt=-funroll-all-loops
 build --cxxopt=-funroll-loops
+
+# boringssl warnings (treated as error otherwise)
+build --copt=-Wno-error=array-bounds
+build --host_copt=-Wno-error=array-bounds
+build --host_copt=-Wno-error=stringop-overflow
+# absl warning (treated as error otherwise)
+build --host_copt=-Wno-error=maybe-uninitialized

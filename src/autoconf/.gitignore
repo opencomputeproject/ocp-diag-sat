@@ -1,0 +1,22 @@
+# installed by autoconf
+stamp-h1
+missing
+install-sh
+aclocal.m4
+config.guess
+config.sub
+config.status
+configure
+config.log
+
+# made by autoheader
+stressapptest_config.h.in
+
+# installed by automake
+compile
+Makefile.in
+Makefile
+
+# generated
+autom4te.cache
+stressapptest_config.h

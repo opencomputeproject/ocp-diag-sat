@@ -18,8 +18,7 @@ cc_library(
         "sat.cc",
         "sat_factory.cc",
         "worker.cc",
-    ],
-    hdrs = [
+
         "adler32memcpy.h",
         "clock.h",
         "disk_blocks.h",
@@ -28,25 +27,52 @@ cc_library(
         "os.h",
         "pattern.h",
         "queue.h",
+        "worker.h",
+    ],
+    hdrs = [
         "sat.h",
         "sattypes.h",
-        "stressapptest_config.h",
-        "worker.h",
     ],
     deps = [
         "@com_google_absl//absl/strings:str_format",
-        "@ocp_diag_core//ocpdiag/core/results:measurement_series",
-        "@ocp_diag_core//ocpdiag/core/results:test_run",
-        "@ocp_diag_core//ocpdiag/core/results:test_step",
-        "@ocp_diag_core//ocpdiag/core/results/data_model:dut_info",
-        "@ocp_diag_core//ocpdiag/core/results/data_model:input_model",
-        "@ocp_diag_core//ocpdiag/core/results/data_model:input_model_helpers",
-        "@ocp_diag_core//ocpdiag/core/results/data_model:output_model",
+        "@ocp_diag_core_cpp//ocpdiag/core/results:measurement_series",
+        "@ocp_diag_core_cpp//ocpdiag/core/results:test_run",
+        "@ocp_diag_core_cpp//ocpdiag/core/results:test_step",
+        "@ocp_diag_core_cpp//ocpdiag/core/results/data_model:dut_info",
+        "@ocp_diag_core_cpp//ocpdiag/core/results/data_model:input_model",
+        "@ocp_diag_core_cpp//ocpdiag/core/results/data_model:input_model_helpers",
+        "@ocp_diag_core_cpp//ocpdiag/core/results/data_model:output_model",
+        ":stressapptest_config.h__lib",
     ],
+    visibility = [],
 )
 
 cc_binary(
-    name = "sat_bin",
+    name = "ocp_diag_sat_x86_64",
     srcs = ["main.cc"],
     deps = [":sat_lib"],
+    visibility = [],
+)
+
+genrule(
+    name = "stressapptest_config.h__gen",
+    srcs = [
+        "autoconf/configure.ac",
+        "autoconf/Makefile.am",
+    ],
+    outs = ["stressapptest_config.h"],
+    cmd = """
+        cp src/autoconf/* .
+        autoreconf --install
+        ./configure
+        cp stressapptest_config.h $@
+    """,
+    visibility = [],
+)
+
+cc_library(
+    name = "stressapptest_config.h__lib",
+    hdrs = ["stressapptest_config.h"],
+    include_prefix = ".",
+    visibility = [],
 )
