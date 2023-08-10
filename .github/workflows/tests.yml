@@ -1,0 +1,19 @@
+name: tests
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    env:
+      USE_BAZEL_VERSION: 5.4.0
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/bazel-container
+      - name: verify build
+        run: |
+          bazel build //...
+  
